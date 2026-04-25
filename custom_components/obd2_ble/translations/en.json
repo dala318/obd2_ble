@@ -1,0 +1,49 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Select device",
+        "description": "Select an OBD2 BLE device to set up",
+        "data": {
+          "address": "Device address"
+        }
+      },
+      "bluetooth": {
+        "title": "Select device",
+        "description": "Select an OBD2 BLE device to set up",
+        "data": {
+          "address": "Device address"
+        }
+      }
+    },
+    "abort": {
+      "no_unconfigured_devices": "No OBD2 BLE devices found. Make sure your device is powered on and in range."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Settings",
+        "description": "Settings to control the behaviour of this interface",
+        "data": {
+          "cache_values": "Cache sensor values",
+          "fast_poll": "Fast polling interval (s)",
+          "slow_poll": "Slow polling interval (s)",
+          "xs_poll": "Extra slow polling interval (s)",
+          "service_uuid": "BLE service UUID",
+          "characteristic_uuid_read": "BLE read characteristic UUID",
+          "characteristic_uuid_write": "BLE write characteristic UUID"
+        },
+        "data_description": {
+          "cache_values": "Hold on to sensor values, even when there is no data available.",
+          "fast_poll": "Polling rate to use when actively getting data from the car.",
+          "slow_poll": "Polling rate to use when the car is in range, but turned off.",
+          "xs_poll": "Polling rate to use when the car is out of range. Home Assistant will listen for bluetooth advertisements and update immediately if the car comes back into range.",
+          "service_uuid": "GATT service UUID used to connect to the OBD BLE dongle. Change only if your dongle uses different UUIDs.",
+          "characteristic_uuid_read": "GATT characteristic UUID for notifications/read. Change only if your dongle uses different UUIDs.",
+          "characteristic_uuid_write": "GATT characteristic UUID for sending commands. Change only if your dongle uses different UUIDs."
+        }
+      }
+    }
+  }
+}

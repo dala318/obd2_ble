@@ -1,0 +1,17 @@
+{
+  "domain": "obd2_ble",
+  "name": "OBD2 BLE",
+  "bluetooth": [
+    {
+      "service_uuid": "0000ffe0-0000-1000-8000-00805f9b34fb"
+    }
+  ],
+  "codeowners": ["@dala318"],
+  "config_flow": true,
+  "dependencies": ["bluetooth_adapters"],
+  "documentation": "https://github.com/dala318/obd2_ble",
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/dala318/obd2_ble/issues",
+  "requirements": ["obd"],
+  "version": "0.1.0"
+}
