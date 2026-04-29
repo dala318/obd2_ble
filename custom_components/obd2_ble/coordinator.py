@@ -8,7 +8,8 @@ from homeassistant.components.bluetooth.api import async_address_present
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from obd import OBD
+from .obdii import Command, Connection, Response, at_commands, commands
+
 from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
@@ -34,11 +35,16 @@ DEFAULT_XS_POLL = 3600
 DEFAULT_CACHE_VALUES = True
 
 
+TEMP_COMMANDS = [
+    at_commands.VERSION_ID,
+    commands.ENGINE_SPEED,
+]
+
 class Obd2BleDataUpdateCoordinator(DataUpdateCoordinator):
     """Class to manage fetching data from the API."""
 
     def __init__(
-        self, hass: HomeAssistant, address: str, api: OBD, options
+        self, hass: HomeAssistant, address: str, api: Connection, options
     ) -> None:
         """Initialize."""
         super().__init__(
@@ -52,6 +58,16 @@ class Obd2BleDataUpdateCoordinator(DataUpdateCoordinator):
         self.api = api
         self._cache_data: dict[str, Any] = {}
         self.options = options
+
+    async def _async_call_api(self, command: Command) -> Response:
+        try:
+            # This offloads the blocking 'query' to a separate thread
+            return await self.hass.async_add_executor_job(
+                self.api.query,
+                command
+            )
+        except Exception as err:
+            raise UpdateFailed(f"Error communicating with OBD2: {err}")
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Update data via library."""
@@ -71,12 +87,26 @@ class Obd2BleDataUpdateCoordinator(DataUpdateCoordinator):
                 return self._cache_data
             return {}
 
+        if not self.api.is_connected:
+            try:
+                # This offloads the blocking 'query' to a separate thread
+                await self.hass.async_add_executor_job(
+                    self.api.connect
+                )
+            except Exception as err:
+                raise UpdateFailed(f"Error conection with OBD2: {err}")
+
         try:
-            new_data = await self.api.async_get_data(self.options)
+            new_data = {}
+            for command in TEMP_COMMANDS:
+                try:
+                    response = await self._async_call_api(command)
+                    new_data[command] = response
+                except Exception as err:
+                    _LOGGER.error(f"Error occurred while querying command {command}: {err}")
             if new_data is None:
                 raise UpdateFailed("Failed to connect to OBD device")
             if len(new_data) == 0:
-                # Car is probably off. Switch to slow polling inteval
                 self.update_interval = timedelta(seconds=self._slow_poll_interval)
                 _LOGGER.debug(
                     "Car is probably off, switch to slow polling: interval = %s",

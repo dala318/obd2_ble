@@ -16,8 +16,17 @@ from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.config_validation import config_entry_only_config_schema
 from homeassistant.helpers.typing import ConfigType
 
-from obd import OBD
-from .const import DOMAIN, PLATFORMS, STARTUP_MESSAGE
+from .obdii import Connection
+from .obdii.transports import TransportBLE
+from .const import (
+    DEFAULT_CHARACTERISTIC_UUID_READ,
+    DEFAULT_CHARACTERISTIC_UUID_WRITE,
+    CONF_CHARACTERISTIC_UUID_READ,
+    CONF_CHARACTERISTIC_UUID_WRITE,
+    DOMAIN,
+    PLATFORMS,
+    STARTUP_MESSAGE
+)
 from .coordinator import Obd2BleDataUpdateCoordinator
 
 _LOGGER: logging.Logger = logging.getLogger(__package__)
@@ -45,7 +54,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
             f"Could not find OBD BLE device with address {address}"
         )
 
-    api = OBD(ble_device)
+    transport = TransportBLE(
+        address=ble_device,
+        uuid_write=entry.options.get(CONF_CHARACTERISTIC_UUID_WRITE, DEFAULT_CHARACTERISTIC_UUID_WRITE),
+        uuid_read=entry.options.get(CONF_CHARACTERISTIC_UUID_READ, DEFAULT_CHARACTERISTIC_UUID_READ),
+        # timeout=entry.options.get("timeout", 10.0),
+    )
+    api = Connection(transport, auto_connect=False)
     coordinator = Obd2BleDataUpdateCoordinator(
         hass, address=address, api=api, options=entry.options or {}
     )

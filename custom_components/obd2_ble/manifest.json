@@ -4,6 +4,9 @@
   "bluetooth": [
     {
       "service_uuid": "0000ffe0-0000-1000-8000-00805f9b34fb"
+    },
+    {
+      "service_uuid": "0000fff0-0000-1000-8000-00805f9b34fb"
     }
   ],
   "codeowners": ["@dala318"],
@@ -12,6 +15,5 @@
   "documentation": "https://github.com/dala318/obd2_ble",
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/dala318/obd2_ble/issues",
-  "requirements": ["obd"],
   "version": "0.1.0"
 }

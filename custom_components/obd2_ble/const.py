@@ -10,7 +10,8 @@ DOMAIN_DATA = f"{DOMAIN}_data"
 ISSUE_URL = "https://github.com/dala318/obd2_ble/issues"
 
 # Platforms
-PLATFORMS: list[Platform] = [Platform.BINARY_SENSOR, Platform.BUTTON, Platform.SENSOR]
+PLATFORMS: list[Platform] = []
+# PLATFORMS: list[Platform] = [Platform.BINARY_SENSOR, Platform.BUTTON, Platform.SENSOR]
 
 
 # Configuration and options
