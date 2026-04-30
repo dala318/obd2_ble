@@ -9,7 +9,7 @@ from homeassistant.components.bluetooth.api import async_address_present
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .obdii import Command, Connection, Response, at_commands, commands
+from .obdii import Command, Connection, Response, at_commands
 
 from .const import DOMAIN
 
@@ -36,9 +36,8 @@ DEFAULT_XS_POLL = 3600
 DEFAULT_CACHE_VALUES = True
 
 
-TEMP_COMMANDS = [
+BASE_COMMANDS = [
     at_commands.VERSION_ID,
-    commands.ENGINE_SPEED,
 ]
 
 class Obd2BleDataUpdateCoordinator(DataUpdateCoordinator):
@@ -59,6 +58,9 @@ class Obd2BleDataUpdateCoordinator(DataUpdateCoordinator):
         self.api = api
         self._cache_data: dict[str, Any] = {}
         self.options = options
+
+        # Track which commands are active to avoid unnecessary polling of inactive commands
+        self.active_commands = set()
 
     async def _async_call_api(self, command: Command) -> Response:
         try:
@@ -99,7 +101,7 @@ class Obd2BleDataUpdateCoordinator(DataUpdateCoordinator):
 
         try:
             new_data = {}
-            for command in TEMP_COMMANDS:
+            for command in set(BASE_COMMANDS) | self.active_commands:
                 try:
                     response = await self._async_call_api(command)
                     new_data[command] = response

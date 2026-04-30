@@ -7,10 +7,11 @@ NAME = "OBD2 BLE"
 DOMAIN = "obd2_ble"
 DOMAIN_DATA = f"{DOMAIN}_data"
 
+ATTRIBUTION = "Data provided by http://jsonplaceholder.typicode.com/"
 ISSUE_URL = "https://github.com/dala318/obd2_ble/issues"
 
 # Platforms
-PLATFORMS: list[Platform] = []
+PLATFORMS: list[Platform] = [Platform.SENSOR]
 # PLATFORMS: list[Platform] = [Platform.BINARY_SENSOR, Platform.BUTTON, Platform.SENSOR]
 
 
