@@ -1,6 +1,7 @@
 """Coordinator for OBD2 BLE."""
 
 from datetime import timedelta
+from functools import partial
 import logging
 from typing import Any
 
@@ -91,7 +92,7 @@ class Obd2BleDataUpdateCoordinator(DataUpdateCoordinator):
             try:
                 # This offloads the blocking 'query' to a separate thread
                 await self.hass.async_add_executor_job(
-                    self.api.connect
+                    partial(self.api.connect, loop=self.hass.loop)
                 )
             except Exception as err:
                 raise UpdateFailed(f"Error conection with OBD2: {err}")
