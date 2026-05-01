@@ -101,9 +101,12 @@ class Obd2BleDataUpdateCoordinator(DataUpdateCoordinator):
 
         try:
             new_data = {}
-            _LOGGER.info("Polling OBD2 for active commands: %s", self.active_commands)
             for command in set(BASE_COMMANDS) | self.active_commands:
+                if command is None:
+                    _LOGGER.warning("Skipping invalid command: %s", command)
+                    continue
                 try:
+                    _LOGGER.debug("Querying OBD2 for command %s", command)
                     response = await self._async_call_api(command)
                     new_data[command] = response
                 except Exception as err:

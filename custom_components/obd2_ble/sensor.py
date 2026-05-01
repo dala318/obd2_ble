@@ -73,7 +73,7 @@ class ObdBleSensor(ObdBleEntity, SensorEntity):
         sensor: str,
     ) -> None:
         """Initialize the sensor."""
-        super().__init__(coordinator, config_entry)
+        super().__init__(coordinator, config_entry, SENSOR_TYPES[sensor].key)
         self._sensor = sensor
         self._attr_name = f"{NAME} {SENSOR_TYPES[sensor].name}"
         self._attr_device_class = SENSOR_TYPES[sensor].device_class

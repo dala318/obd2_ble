@@ -61,7 +61,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
         # timeout=entry.options.get("timeout", 10.0),
         loop = hass.loop,
     )
-    api = Connection(transport, auto_connect=False)
+    if _LOGGER.handlers:
+        # Pass the primary handler used by your integration's logger
+        handler = _LOGGER.handlers[0]
+    else:
+        # Fallback: If HA hasn't attached handlers yet, use the NullHandler 
+        # or the root handler to avoid errors.
+        handler = logging.NullHandler()
+    api = Connection(transport, auto_connect=False, log_handler=handler)
     coordinator = Obd2BleDataUpdateCoordinator(
         hass, address=address, api=api, options=entry.options or {}
     )

@@ -14,21 +14,22 @@ _LOGGER = logging.getLogger(__name__)
 class ObdBleEntity(CoordinatorEntity):
     """Config entry for obd2_ble."""
 
-    def __init__(self, coordinator, config_entry) -> None:
+    def __init__(self, coordinator, config_entry, key) -> None:
         """Initialise."""
         super().__init__(coordinator)
         self.config_entry = config_entry
+        self._key = key
 
     async def async_added_to_hass(self):
         """Run when entity is added to register its command."""
-        self.coordinator.active_commands.add(self.config_entry.data.get("key"))
-        _LOGGER.debug("Added command %s to active commands", self.config_entry.data.get("key"))
+        self.coordinator.active_commands.add(self._key)
+        _LOGGER.debug("Added command %s to active commands", self._key)
         await super().async_added_to_hass()
 
     async def async_will_remove_from_hass(self):
         """Clean up when sensor is disabled/removed."""
-        self.coordinator.active_commands.discard(self.config_entry.data.get("key"))
-        _LOGGER.debug("Removed command %s from active commands", self.config_entry.data.get("key"))
+        self.coordinator.active_commands.discard(self._key)
+        _LOGGER.debug("Removed command %s from active commands", self._key)
         await super().async_will_remove_from_hass()
 
     @property
