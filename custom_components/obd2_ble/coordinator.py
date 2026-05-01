@@ -9,7 +9,7 @@ from homeassistant.components.bluetooth.api import async_address_present
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .obdii import Command, Connection, Response, at_commands
+from obdii import Command, Connection, Response, at_commands
 
 from .const import DOMAIN
 
@@ -60,7 +60,7 @@ class Obd2BleDataUpdateCoordinator(DataUpdateCoordinator):
         self.options = options
 
         # Track which commands are active to avoid unnecessary polling of inactive commands
-        self.active_commands = set()
+        self.active_commands: set[Command] = set()
 
     async def _async_call_api(self, command: Command) -> Response:
         try:
@@ -101,6 +101,7 @@ class Obd2BleDataUpdateCoordinator(DataUpdateCoordinator):
 
         try:
             new_data = {}
+            _LOGGER.info("Polling OBD2 for active commands: %s", self.active_commands)
             for command in set(BASE_COMMANDS) | self.active_commands:
                 try:
                     response = await self._async_call_api(command)

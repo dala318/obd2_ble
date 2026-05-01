@@ -15,5 +15,6 @@
   "documentation": "https://github.com/dala318/obd2_ble",
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/dala318/obd2_ble/issues",
+  "requirements": ["py-obdii"],
   "version": "0.1.0"
 }

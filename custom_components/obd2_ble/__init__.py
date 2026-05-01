@@ -16,8 +16,8 @@ from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.config_validation import config_entry_only_config_schema
 from homeassistant.helpers.typing import ConfigType
 
-from .obdii import Connection
-from .obdii.transports import TransportBLE
+from obdii import Connection
+from .transport_ble import TransportBLE
 from .const import (
     DEFAULT_CHARACTERISTIC_UUID_READ,
     DEFAULT_CHARACTERISTIC_UUID_WRITE,

@@ -1,6 +1,6 @@
 """Sensor platform for OBD2 BLE."""
 
-from .obdii import commands
+from obdii import commands
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
