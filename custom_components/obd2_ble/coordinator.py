@@ -92,6 +92,7 @@ class Obd2BleDataUpdateCoordinator(DataUpdateCoordinator):
 
         if not self.api.is_connected:
             try:
+                _LOGGER.debug("Device is available but not connected, attempt to connect")
                 # This offloads the blocking 'query' to a separate thread
                 await self.hass.async_add_executor_job(
                     partial(self.api.connect, loop=self.hass.loop)

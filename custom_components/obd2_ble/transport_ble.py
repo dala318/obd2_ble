@@ -1,28 +1,30 @@
 import asyncio
+import logging
 
 from bleak import BleakClient
 from bleak.backends.device import BLEDevice
 
-from threading import Thread, Lock, Event
+from threading import Lock, Event
 from time import monotonic
 from typing import Optional, Dict, Any, Coroutine, Union
 
 from obdii.transports.transport_base import TransportBase
 from obdii.basetypes import MISSING
 
+_LOGGER: logging.Logger = logging.getLogger(__package__)
 
 class TransportBLE(TransportBase):
     def __init__(
         self,
-        address: Union[str, BLEDevice] = MISSING,
+        ble_device: BLEDevice = MISSING,
         uuid_write: str = MISSING,
         uuid_read: str = MISSING,
         timeout: float = 10.0,
         loop: Optional[asyncio.AbstractEventLoop] = None,
         **kwargs,
     ) -> None:
+        self._ble_device = ble_device
         self.config: Dict[str, Any] = {
-            "address": address,
             "uuid_write": uuid_write,
             "uuid_read": uuid_read,
             "timeout": timeout,
@@ -31,9 +33,10 @@ class TransportBLE(TransportBase):
 
         self.ble_conn: Optional[BleakClient] = None
 
-        if address is MISSING or uuid_write is MISSING or uuid_read is MISSING:
+        if ble_device is MISSING or uuid_write is MISSING or uuid_read is MISSING:
             raise ValueError(
-                "address, uuid_write and uuid_read must be specified for TransportBLE."
+                "ble_device (%s), uuid_write (%s) and uuid_read (%s) must be specified for TransportBLE.",
+                ble_device, uuid_write, uuid_read
             )
 
         self._buffer = bytearray()
@@ -41,11 +44,9 @@ class TransportBLE(TransportBase):
         self._data_ready = Event()
 
         self._loop = loop
-        # self._thread: Optional[Thread] = None
-        # self._managed_loop = False
 
     def __repr__(self) -> str:
-        return f"<TransportBLE {self.config.get('address')}>"
+        return f"<TransportBLE {self._ble_device}>"
 
     def _run_coro(self, coro: Coroutine) -> Any:
         if self._loop is None:
@@ -59,9 +60,14 @@ class TransportBLE(TransportBase):
         self._data_ready.set()
 
     async def _connect(self) -> None:
-        self.ble_conn = BleakClient(self.config["address"])
+        self.ble_conn = BleakClient(self._ble_device)
+        _LOGGER.debug("Attempting to connect to BLE device %s", self.ble_conn)
         await self.ble_conn.connect()
         await self.ble_conn.start_notify(self.config["uuid_read"], self._notify_callback)
+        for service in self.ble_conn.services:
+            _LOGGER.debug("Discovered service: %s", service.uuid)
+            for char in service.characteristics:
+                _LOGGER.debug("Discovered characteristic: %s", char.uuid)
     
     async def _close(self) -> None:
         if self.ble_conn and self.ble_conn.is_connected:
@@ -80,13 +86,6 @@ class TransportBLE(TransportBase):
         if loop is not None:
             self._loop = loop
 
-        # STANDALONE MODE: If no loop was passed, create one and a thread
-        # if self._loop is None:
-        #     self._managed_loop = True
-        #     self._loop = asyncio.new_event_loop()
-        #     self._thread = Thread(target=self._loop.run_forever, daemon=True)
-        #     self._thread.start()
-        
         try:
             self._run_coro(self._connect())
         except Exception:
@@ -99,16 +98,6 @@ class TransportBLE(TransportBase):
                 self._run_coro(self._close())
             except Exception:
                 pass # Already disconnecting or loop is dead
-
-        # STANDALONE MODE: Stop and join the loop and thread
-        # if self._managed_loop:
-        #     if self._loop and self._loop.is_running():
-        #         self._loop.call_soon_threadsafe(self._loop.stop)
-        #     if self._thread and self._thread.is_alive():
-        #         self._thread.join(timeout=2.0)            
-        #     self._loop = None
-        #     self._thread = None
-        #     self._managed_loop = False
 
     def is_connected(self) -> bool:
         if self.ble_conn is None:

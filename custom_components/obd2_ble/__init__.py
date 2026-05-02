@@ -55,7 +55,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
         )
 
     transport = TransportBLE(
-        address=ble_device,
+        ble_device=ble_device,
         uuid_write=entry.options.get(CONF_CHARACTERISTIC_UUID_WRITE, DEFAULT_CHARACTERISTIC_UUID_WRITE),
         uuid_read=entry.options.get(CONF_CHARACTERISTIC_UUID_READ, DEFAULT_CHARACTERISTIC_UUID_READ),
         # timeout=entry.options.get("timeout", 10.0),
