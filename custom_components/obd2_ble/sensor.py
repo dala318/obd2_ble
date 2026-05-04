@@ -3,7 +3,7 @@
 from obdii import commands
 
 from homeassistant.components.sensor import (
-    SensorDeviceClass,
+    # SensorDeviceClass,
     SensorEntity,
     SensorEntityDescription,
     SensorStateClass,
@@ -43,7 +43,7 @@ SENSOR_TYPES: dict[str, SensorEntityDescription] = {
         key=commands.ENGINE_SPEED,
         icon="mdi:gauge",
         name="Engine speed",
-        native_unit_of_measurement=commands.ENGINE_SPEED.units,
+        native_unit_of_measurement=commands.ENGINE_SPEED.units.__str__(),
         suggested_display_precision=1,
         # device_class=SensorDeviceClass.REVOLUTION_PER_MINUTE,
         state_class=SensorStateClass.MEASUREMENT,
@@ -57,8 +57,8 @@ async def async_setup_entry(
     """Set up sensor platform."""
     coordinator = hass.data[DOMAIN][entry.entry_id]
     entities = [
-        ObdBleSensor(coordinator, entry, sensor_desc)
-        for sensor_desc in SENSOR_TYPES
+        ObdBleSensor(coordinator, entry, id, description)
+        for id, description in SENSOR_TYPES.items()
     ]
     async_add_entities(entities)
 
@@ -70,24 +70,31 @@ class ObdBleSensor(ObdBleEntity, SensorEntity):
         self,
         coordinator,
         config_entry,
-        sensor: str,
+        id: str,
+        description: SensorEntityDescription,
     ) -> None:
         """Initialize the sensor."""
-        super().__init__(coordinator, config_entry, SENSOR_TYPES[sensor].key)
-        self._sensor = sensor
-        self._attr_name = f"{NAME} {SENSOR_TYPES[sensor].name}"
-        self._attr_device_class = SENSOR_TYPES[sensor].device_class
-        self._attr_native_unit_of_measurement = SENSOR_TYPES[
-            sensor
-        ].native_unit_of_measurement
-        self._attr_state_class = SENSOR_TYPES[sensor].state_class
+        super().__init__(coordinator, config_entry, description.key, description.icon)
+        self._id = id
+        self._description = description
+        self._attr_name = f"{NAME} {description.name}"
+        self._attr_device_class = description.device_class
+        self._attr_native_unit_of_measurement = description.native_unit_of_measurement
+        self._attr_state_class = description.state_class
 
-    @property
-    def native_value(self):
-        """Return the state of the sensor."""
-        return self.coordinator.data.get(self._sensor)
+    async def async_update(self) -> None:
+        try:
+            # data = await self.client.get_data()
+            # data = self.coordinator.data.get(self._id)
+            data = self.coordinator.data.get(self._description.key)
+        except Exception as ex:
+            self._attr_available = False
+        else:
+            self._attr_available = True
+            self._attr_native_value = data
 
-    @property
-    def icon(self):
-        """Return the icon of the sensor."""
-        return SENSOR_TYPES[self._sensor].icon
+    # @property
+    # def native_value(self):
+    #     """Return the state of the sensor."""
+    #     return self.coordinator.data.get(self._id)
+

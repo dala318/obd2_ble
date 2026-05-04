@@ -16,8 +16,9 @@ from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.config_validation import config_entry_only_config_schema
 from homeassistant.helpers.typing import ConfigType
 
-from obdii import Connection
-from .transport_ble import TransportBLE
+# from obdii import Connection
+from .obdii.async_connection import AsyncConnection
+from .obdii.transport_ble import TransportBLE
 from .const import (
     DEFAULT_CHARACTERISTIC_UUID_READ,
     DEFAULT_CHARACTERISTIC_UUID_WRITE,
@@ -61,14 +62,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
         # timeout=entry.options.get("timeout", 10.0),
         loop = hass.loop,
     )
-    if _LOGGER.handlers:
-        # Pass the primary handler used by your integration's logger
-        handler = _LOGGER.handlers[0]
-    else:
-        # Fallback: If HA hasn't attached handlers yet, use the NullHandler 
-        # or the root handler to avoid errors.
-        handler = logging.NullHandler()
-    api = Connection(transport, auto_connect=False, log_handler=handler)
+    # if _LOGGER.handlers:
+    #     # Pass the primary handler used by your integration's logger
+    #     handler = _LOGGER.handlers[0]
+    # else:
+    #     # Fallback: If HA hasn't attached handlers yet, use the NullHandler 
+    #     # or the root handler to avoid errors.
+    #     handler = logging.NullHandler()
+    # api = AsyncConnection(transport, auto_connect=False, log_handler=handler)
+    api = AsyncConnection(transport, auto_connect=False)
     coordinator = Obd2BleDataUpdateCoordinator(
         hass, address=address, api=api, options=entry.options or {}
     )

@@ -1,7 +1,7 @@
 """Coordinator for OBD2 BLE."""
 
 from datetime import timedelta
-from functools import partial
+# from functools import partial
 import logging
 from typing import Any
 
@@ -9,7 +9,9 @@ from homeassistant.components.bluetooth.api import async_address_present
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from obdii import Command, Connection, Response, at_commands
+from obdii import Command, Response, at_commands
+# from .obdii.transport_ble import TransportBLE
+from .obdii.async_connection import AsyncConnection
 
 from .const import DOMAIN
 
@@ -44,7 +46,7 @@ class Obd2BleDataUpdateCoordinator(DataUpdateCoordinator):
     """Class to manage fetching data from the API."""
 
     def __init__(
-        self, hass: HomeAssistant, address: str, api: Connection, options
+        self, hass: HomeAssistant, address: str, api: AsyncConnection, options
     ) -> None:
         """Initialize."""
         super().__init__(
@@ -61,16 +63,6 @@ class Obd2BleDataUpdateCoordinator(DataUpdateCoordinator):
 
         # Track which commands are active to avoid unnecessary polling of inactive commands
         self.active_commands: set[Command] = set()
-
-    async def _async_call_api(self, command: Command) -> Response:
-        try:
-            # This offloads the blocking 'query' to a separate thread
-            return await self.hass.async_add_executor_job(
-                self.api.query,
-                command
-            )
-        except Exception as err:
-            raise UpdateFailed(f"Error communicating with OBD2: {err}")
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Update data via library."""
@@ -90,16 +82,17 @@ class Obd2BleDataUpdateCoordinator(DataUpdateCoordinator):
                 return self._cache_data
             return {}
 
-        if not self.api.is_connected:
+        _LOGGER.debug("Device is available, check if connected")
+        if not self.api.is_connected():
             try:
-                _LOGGER.debug("Device is available but not connected, attempt to connect")
-                # This offloads the blocking 'query' to a separate thread
-                await self.hass.async_add_executor_job(
-                    partial(self.api.connect, loop=self.hass.loop)
-                )
+                _LOGGER.info("Device is available but not connected, attempt to connect")
+                await self.api.aconnect()
+                if not self.api.is_connected():
+                    raise UpdateFailed("No connection to OBD2 after connect attempt")
             except Exception as err:
-                raise UpdateFailed(f"Error conection with OBD2: {err}")
+                raise UpdateFailed(f"Error connecting with OBD2: {err}")
 
+        _LOGGER.debug("Device is connected, proceed to query data")
         try:
             new_data = {}
             for command in set(BASE_COMMANDS) | self.active_commands:
@@ -108,7 +101,7 @@ class Obd2BleDataUpdateCoordinator(DataUpdateCoordinator):
                     continue
                 try:
                     _LOGGER.debug("Querying OBD2 for command %s", command)
-                    response = await self._async_call_api(command)
+                    response = await self.api.aquery(command)
                     new_data[command] = response
                 except Exception as err:
                     _LOGGER.error(f"Error occurred while querying command {command}: {err}")
