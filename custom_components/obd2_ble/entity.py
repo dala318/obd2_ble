@@ -14,7 +14,7 @@ _LOGGER = logging.getLogger(__name__)
 class ObdBleEntity(CoordinatorEntity):
     """Config entry for obd2_ble."""
 
-    def __init__(self, coordinator, config_entry, command, icon) -> None:
+    def __init__(self, coordinator, config_entry, command, icon, id, domain) -> None:
         """Initialise."""
         super().__init__(coordinator)
         self.config_entry = config_entry
@@ -27,7 +27,7 @@ class ObdBleEntity(CoordinatorEntity):
             # "model": VERSION,
             "manufacturer": NAME,
         }
-        self._attr_unique_id = f"{self.config_entry.data[CONF_ADDRESS]}-{self.name}"
+        self._attr_unique_id = f"{self.config_entry.data[CONF_ADDRESS]}-{domain}-{id}"
 
 
     async def async_added_to_hass(self):

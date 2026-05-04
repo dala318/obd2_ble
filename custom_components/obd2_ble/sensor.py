@@ -3,7 +3,7 @@
 from obdii import commands
 
 from homeassistant.components.sensor import (
-    # SensorDeviceClass,
+    SensorDeviceClass,
     SensorEntity,
     SensorEntityDescription,
     SensorStateClass,
@@ -15,12 +15,6 @@ from .const import DOMAIN, NAME
 from .entity import ObdBleEntity
 
 SENSOR_TYPES: dict[str, SensorEntityDescription] = {
-    # "gear_position": SensorEntityDescription(
-    #     key="gear_position",
-    #     icon="mdi:car-shift-pattern",
-    #     name="Gear position",
-    #     device_class=SensorDeviceClass.ENUM,
-    # ),
     # "bat_12v_voltage": SensorEntityDescription(
     #     key="bat_12v_voltage",
     #     icon="mdi:car-battery",
@@ -39,6 +33,20 @@ SENSOR_TYPES: dict[str, SensorEntityDescription] = {
     #     device_class=SensorDeviceClass.CURRENT,
     #     state_class=SensorStateClass.MEASUREMENT,
     # ),
+    "odometer": SensorEntityDescription(
+        key=commands.ODOMETER,
+        icon="mdi:car",
+        name="Odometer",
+        native_unit_of_measurement=commands.ODOMETER.units.__str__(),
+        device_class=SensorDeviceClass.DISTANCE,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+    ),
+    "transmission_actual_gear": SensorEntityDescription(
+        key=commands.TRANSMISSION_ACTUAL_GEAR,
+        icon="mdi:car-shift-pattern",
+        name="Gear position",
+        device_class=SensorDeviceClass.ENUM,
+    ),
     "engine_speed": SensorEntityDescription(
         key=commands.ENGINE_SPEED,
         icon="mdi:gauge",
@@ -74,7 +82,7 @@ class ObdBleSensor(ObdBleEntity, SensorEntity):
         description: SensorEntityDescription,
     ) -> None:
         """Initialize the sensor."""
-        super().__init__(coordinator, config_entry, description.key, description.icon)
+        super().__init__(coordinator, config_entry, description.key, description.icon, id, DOMAIN)
         self._id = id
         self._description = description
         self._attr_name = f"{NAME} {description.name}"

@@ -55,7 +55,7 @@ class TransportBLE(AsyncTransportBase):
 
     async def async_connect(self) -> None:
         self.ble_conn = BleakClient(self._ble_device)
-        _LOGGER.debug("Attempting to connect to BLE device %s", self.ble_conn)
+        _LOGGER.debug("Attempting to connect to BLE device %s (%s)", self.ble_conn.name, self._ble_device.address)
         await self.ble_conn.connect()
         await self.ble_conn.start_notify(self.config["uuid_read"], self._notify_callback)
         for service in self.ble_conn.services:

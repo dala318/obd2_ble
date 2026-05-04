@@ -68,7 +68,7 @@ class Obd2BleDataUpdateCoordinator(DataUpdateCoordinator):
         """Update data via library."""
 
         # Check if the device is still available
-        _LOGGER.debug("Check if the device is still available to connect")
+        _LOGGER.debug("Check if the device is still available")
         available = async_address_present(self.hass, self._address, connectable=True)
         if not available:
             # Device out of range? Switch to active polling interval for when it reappears
