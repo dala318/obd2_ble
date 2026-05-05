@@ -3,25 +3,33 @@ import logging
 
 from bleak import BleakClient
 from bleak.backends.device import BLEDevice
+from bleak_retry_connector import establish_connection, BleakClientWithServiceCache
 
-from typing import Optional, Dict, Any
+from threading import Lock, Event
+from time import monotonic
+from typing import Optional, Dict, Any, Coroutine, Union
 
+from obdii.transports.transport_base import TransportBase
 from obdii.basetypes import MISSING
-
-from .async_transport_base import AsyncTransportBase
 
 _LOGGER: logging.Logger = logging.getLogger(__package__)
 
-class TransportBLE(AsyncTransportBase):
+class TransportBLE(TransportBase):
     def __init__(
         self,
         ble_device: BLEDevice = MISSING,
         uuid_write: str = MISSING,
         uuid_read: str = MISSING,
         timeout: float = 10.0,
+        loop: Optional[asyncio.AbstractEventLoop] = None,
         **kwargs,
     ) -> None:
-        self._ble_device = ble_device
+        if ble_device is MISSING or uuid_write is MISSING or uuid_read is MISSING:
+            raise ValueError(
+                "ble_device (%s), uuid_write (%s) and uuid_read (%s) must be specified for TransportBLE.",
+                ble_device, uuid_write, uuid_read
+            )
+
         self.config: Dict[str, Any] = {
             "uuid_write": uuid_write,
             "uuid_read": uuid_read,
@@ -29,71 +37,108 @@ class TransportBLE(AsyncTransportBase):
             **kwargs,
         }
 
-        self.ble_conn: Optional[BleakClient] = None
-
-        if ble_device is MISSING or uuid_write is MISSING or uuid_read is MISSING:
-            raise ValueError(
-                "ble_device (%s), uuid_write (%s) and uuid_read (%s) must be specified for TransportBLE.",
-                ble_device, uuid_write, uuid_read
-            )
-
+        self._ble_device = ble_device
+        self._ble_conn: Optional[BleakClient] = None
         self._buffer = bytearray()
-        self._data_event = asyncio.Event()
+        self._lock = Lock()
+        self._data_ready = Event()
+        self._loop = loop
 
     def __repr__(self) -> str:
         return f"<TransportBLE {self._ble_device}>"
 
+    def _run_coro(self, coro: Coroutine) -> Any:
+        if self._loop is None:
+            raise RuntimeError("Event loop is not running.")
+        future = asyncio.run_coroutine_threadsafe(coro, self._loop)
+        return future.result(timeout=self.config["timeout"])
+    
     def _notify_callback(self, _, data: bytearray) -> None:
-        self._buffer.extend(data)
-        self._data_event.set()
+        with self._lock:
+            _LOGGER.debug("Data in callback: %s", data)
+            self._buffer.extend(data)
+        self._data_ready.set()
 
-    def is_connected(self) -> bool:
-        if self.ble_conn is None:
-            _LOGGER.warning("BLE connection is not defined.")
-            return False
-        return self.ble_conn.is_connected
-
-    async def async_connect(self) -> None:
-        self.ble_conn = BleakClient(self._ble_device)
-        _LOGGER.debug("Attempting to connect to BLE device %s (%s)", self.ble_conn.name, self._ble_device.address)
-        await self.ble_conn.connect()
-        await self.ble_conn.start_notify(self.config["uuid_read"], self._notify_callback)
-        for service in self.ble_conn.services:
+    async def _connect(self) -> None:
+        _LOGGER.debug("Attempting to connect to BLE device %s (%s)", self._ble_device.name, self._ble_device.address)
+        # self._ble_conn = BleakClient(self._ble_device)
+        # await self._ble_conn.connect()
+        self._ble_conn = await establish_connection(
+            BleakClientWithServiceCache,
+            self._ble_device,
+            self._ble_device.name or "Unknown Device",
+            max_attempts=3
+        )
+        # if self._ble_conn is None:
+        #     raise ConnectionError(f"Failed to connect to BLE device {self._ble_device.address}")
+        
+        await self._ble_conn.start_notify(self.config["uuid_read"], self._notify_callback)
+        for service in self._ble_conn.services:
             _LOGGER.debug("Discovered service: %s", service.uuid)
             for char in service.characteristics:
                 _LOGGER.debug("Discovered characteristic: %s", char.uuid)
     
-    async def async_close(self) -> None:
-        if self.ble_conn and self.ble_conn.is_connected:
-            await self.ble_conn.stop_notify(self.config["uuid_read"])
-            await self.ble_conn.disconnect()
-        self.ble_conn = None
+    async def _close(self) -> None:
+        if self._ble_conn and self._ble_conn.is_connected:
+            await self._ble_conn.stop_notify(self.config["uuid_read"])
+            await self._ble_conn.disconnect()
+        self._ble_conn = None
 
-    async def async_write_bytes(self, query: bytes) -> None:
-        if self.ble_conn is None:
+    async def _write(self, query: bytes) -> None:
+        if self._ble_conn is None:
             raise RuntimeError("BLE connection is not established.")
-        await self.ble_conn.write_gatt_char(self.config["uuid_write"], query)
+        await self._ble_conn.write_gatt_char(self.config["uuid_write"], query)
 
-    async def async_read_bytes(self, expected_seq: bytes = b'>', size: Optional[int] = None) -> bytes:
-        """Read bytes from the BLE device until expected sequence or size is reached."""
+    def connect(self, loop: Optional[asyncio.AbstractEventLoop] = None, **kwargs) -> None:
+        self.config.update(kwargs)
+
+        if loop is not None:
+            self._loop = loop
+
+        try:
+            self._run_coro(self._connect())
+        except Exception:
+            self.close() # Cleanup on failure
+            raise
+
+    def close(self) -> None:
+        if self.is_connected():
+            try:
+                self._run_coro(self._close())
+            except Exception:
+                pass # Already disconnecting or loop is dead
+
+    def is_connected(self) -> bool:
+        if self._ble_conn is None:
+            return False
+        return self._ble_conn.is_connected
+
+    def write_bytes(self, query: bytes) -> None:
+        if not self.is_connected():
+            raise RuntimeError("BLE is not connected.")
+        with self._lock:
+            self._buffer.clear()
+        self._data_ready.clear()
+        self._run_coro(self._write(query))
+
+    def read_bytes(self, expected_seq: bytes = b'>', size: int = MISSING) -> bytes:
         lenterm = len(expected_seq)
+        deadline = monotonic() + self.config["timeout"]
 
         while True:
-            # Check if we have enough data to look for the terminator
-            if len(self._buffer) >= lenterm:
-                if self._buffer[-lenterm:] == expected_seq:
-                    break
-            if size is not None and len(self._buffer) >= size:
+            remaining = deadline - monotonic()
+            if remaining <= 0:
+                raise TimeoutError("read timed out.")
+
+            with self._lock:
+                snapshot = bytes(self._buffer)
+
+            if snapshot[-lenterm:] == expected_seq:
+                break
+            if size is not MISSING and len(snapshot) >= size:
                 break
 
-            # Wait for more data with timeout
-            self._data_event.clear()
-            try:
-                await asyncio.wait_for(self._data_event.wait(), timeout=self.config["timeout"])
-            except asyncio.TimeoutError:
-                # Timeout reached, return what we have
-                break
+            self._data_ready.wait(timeout=remaining)
+            self._data_ready.clear()
 
-        result = bytes(self._buffer)
-        self._buffer.clear()
-        return result
+        return snapshot
