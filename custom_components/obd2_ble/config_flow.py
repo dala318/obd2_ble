@@ -1,9 +1,10 @@
 """Adds config flow for OBD2 BLE."""
 
+import logging
 from typing import Any
 
 try:
-    from bluetooth_data_tools import human_readable_name
+    from bluetooth_data_tools import human_readable_name # type: ignore
 except ImportError:  # pragma: no cover - fallback for missing dependency
     def human_readable_name(_manufacturer: str | None, name: str | None, address: str):
         """Fallback if bluetooth_data_tools is unavailable."""
@@ -17,8 +18,9 @@ from homeassistant.components.bluetooth import (
 )
 from homeassistant.const import CONF_ADDRESS
 from homeassistant.core import callback
-from homeassistant.data_entry_flow import FlowResult
+# from homeassistant.data_entry_flow import FlowResult
 
+from .coordinator import Obd2BleDataUpdateCoordinator
 from .const import (
     DOMAIN,
     CONF_SERVICE_UUID,
@@ -28,7 +30,11 @@ from .const import (
     DEFAULT_CHARACTERISTIC_UUID_READ,
     DEFAULT_CHARACTERISTIC_UUID_WRITE,
 )
+from .obdii.transport_ble import TransportBLE
 
+_LOGGER = logging.getLogger(__name__)
+
+# LOCAL_NAMES = {"OBDBLE", "OBDII-BLE", "OBD2-BLE", "OBDII BLE", "OBD2 BLE", "IOS-Vlink"}
 LOCAL_NAMES = {"OBDBLE"}
 
 
@@ -54,7 +60,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_bluetooth(
         self, discovery_info: BluetoothServiceInfoBleak
-    ) -> FlowResult:
+    ) -> config_entries.ConfigFlowResult:
         """Handle the bluetooth discovery step."""
         await self.async_set_unique_id(discovery_info.address)
         self._abort_if_unique_id_configured()
@@ -66,7 +72,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         }
         return await self.async_step_user()
 
-    async def async_step_user(self, user_input: dict | None = None) -> FlowResult:
+    async def async_step_user(self, user_input: dict | None = None) -> config_entries.ConfigFlowResult:
         """Handle the user step to pick discovered device."""
         errors: dict[str, str] = {}
 
@@ -130,7 +136,7 @@ class Obd2BleOptionsFlowHandler(config_entries.OptionsFlow):
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> config_entries.ConfigFlowResult:
         """Manage the options."""
         if not self.options:
             self.options = dict(self.config_entry.options)
@@ -138,6 +144,23 @@ class Obd2BleOptionsFlowHandler(config_entries.OptionsFlow):
         if user_input is not None:
             self.options.update(user_input)
             return await self._update_options()
+
+        # # Check if runtime_data exists (Python 3.10+ way)
+        # if hasattr(self.config_entry, "runtime_data"):
+        #     coordinator = self.config_entry.runtime_data.coordinator
+        # else:
+        #     # Fallback to the old way where DOMAIN is your integration slug
+        #     coordinator = self.hass.data[DOMAIN][self.config_entry.entry_id]
+        coordinator: Obd2BleDataUpdateCoordinator = self.hass.data[DOMAIN][self.config_entry.entry_id]
+        pid_commands = await coordinator.async_get_all_pid_commands()
+        _LOGGER.debug("PID commands: %s", pid_commands)
+        transport = coordinator.api.transport
+        if isinstance(transport, TransportBLE):
+            service_collection = transport.get_service_collection()
+            for service in service_collection:
+                _LOGGER.debug("Discovered service: %s", service.uuid)
+                for characteristic in service.characteristics:
+                    _LOGGER.debug("Discovered characteristic: %s", characteristic.uuid)
 
         return self.async_show_form(
             step_id="init",

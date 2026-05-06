@@ -8,7 +8,7 @@ from homeassistant.components.bluetooth.api import async_address_present
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from obdii import Command, Connection, Response, at_commands
+from obdii import Command, Connection, Protocol, Response, at_commands, commands
 
 from .const import DOMAIN
 
@@ -98,6 +98,7 @@ class Obd2BleDataUpdateCoordinator(DataUpdateCoordinator):
                 try:
                     _LOGGER.debug("Querying OBD2 for command %s", command)
                     response: Response = await self.hass.async_add_executor_job(self.api.query, command)
+                    _LOGGER.debug("Received response for command %s: %s", command, response)
                     new_data[command] = response
                 except Exception as err:
                     _LOGGER.error(f"Error occurred while querying command {command}: {err}")
@@ -122,6 +123,31 @@ class Obd2BleDataUpdateCoordinator(DataUpdateCoordinator):
                 self._cache_data.update(new_data)
                 return self._cache_data
             return new_data
+
+    async def async_get_all_pid_commands(self) -> tuple[list[Any], list[Any]]:
+        if not self.api.is_connected():
+            raise UpdateFailed("No connection to OBD2 to get supported PIDs and Commands")
+        
+        supported_pids = []
+        supported_cmds = []
+        for cmd in range(0x00, 0xE0, 0x20):
+            try:
+                response: Response = await self.hass.async_add_executor_job(self.api.query, commands[1][cmd])
+                # response = self.api.query(commands[1][cmd])
+                if isinstance(response.value, list):
+                    supported_pids.extend(response.value)
+                    for pid in response.value:
+                        try:
+                            supported_cmds.append(commands[1][pid])
+                        except KeyError:
+                            _LOGGER.warning(f"PID {pid} is supported but no command found in library")
+            except Exception:
+                _LOGGER.warning(f"Failed to query supported PIDs for command {commands[1][cmd]}")
+
+        _LOGGER.info(f"Supported PIDs: {supported_pids}")
+        _LOGGER.info(f"Supported Commands: {supported_cmds}")
+
+        return supported_pids, supported_cmds
 
     @property
     def options(self):

@@ -3,6 +3,7 @@ import logging
 
 from bleak import BleakClient
 from bleak.backends.device import BLEDevice
+from bleak.backends.service import BleakGATTServiceCollection
 from bleak_retry_connector import establish_connection, BleakClientWithServiceCache
 
 from threading import Lock, Event
@@ -75,9 +76,9 @@ class TransportBLE(TransportBase):
         await self._ble_conn.start_notify(self.config["uuid_read"], self._notify_callback)
         for service in self._ble_conn.services:
             _LOGGER.debug("Discovered service: %s", service.uuid)
-            for char in service.characteristics:
-                _LOGGER.debug("Discovered characteristic: %s", char.uuid)
-    
+            for characteristic in service.characteristics:
+                _LOGGER.debug("Discovered characteristic: %s", characteristic.uuid)
+
     async def _close(self) -> None:
         if self._ble_conn and self._ble_conn.is_connected:
             await self._ble_conn.stop_notify(self.config["uuid_read"])
@@ -88,6 +89,11 @@ class TransportBLE(TransportBase):
         if self._ble_conn is None:
             raise RuntimeError("BLE connection is not established.")
         await self._ble_conn.write_gatt_char(self.config["uuid_write"], query)
+
+    def get_service_collection(self) -> BleakGATTServiceCollection:
+        if self._ble_conn is None:
+            raise RuntimeError("BLE connection is not established.")
+        return self._ble_conn.services
 
     def connect(self, loop: Optional[asyncio.AbstractEventLoop] = None, **kwargs) -> None:
         self.config.update(kwargs)

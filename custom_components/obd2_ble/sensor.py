@@ -1,6 +1,8 @@
 """Sensor platform for OBD2 BLE."""
 
-from obdii import commands
+import logging
+
+from obdii import Response, commands
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -13,6 +15,8 @@ from homeassistant.core import HomeAssistant
 
 from .const import DOMAIN, NAME
 from .entity import ObdBleEntity
+
+_LOGGER = logging.getLogger(__name__)
 
 SENSOR_TYPES: dict[str, SensorEntityDescription] = {
     # "bat_12v_voltage": SensorEntityDescription(
@@ -33,19 +37,21 @@ SENSOR_TYPES: dict[str, SensorEntityDescription] = {
     #     device_class=SensorDeviceClass.CURRENT,
     #     state_class=SensorStateClass.MEASUREMENT,
     # ),
-    "odometer": SensorEntityDescription(
-        key=commands.ODOMETER,
-        icon="mdi:car",
-        name="Odometer",
-        native_unit_of_measurement=commands.ODOMETER.units.__str__(),
-        device_class=SensorDeviceClass.DISTANCE,
-        state_class=SensorStateClass.TOTAL_INCREASING,
+    "fuel_status": SensorEntityDescription(
+        key=commands.FUEL_STATUS,
+        icon="mdi:gas-station",
+        name="Fuel Status",
+        native_unit_of_measurement=commands.FUEL_STATUS.units.__str__(),
+        device_class=SensorDeviceClass.VOLUME_STORAGE,
+        state_class=SensorStateClass.MEASUREMENT,
     ),
-    "transmission_actual_gear": SensorEntityDescription(
-        key=commands.TRANSMISSION_ACTUAL_GEAR,
+    "engine_run_time": SensorEntityDescription(
+        key=commands.ENGINE_RUN_TIME,
         icon="mdi:car-shift-pattern",
-        name="Gear position",
-        device_class=SensorDeviceClass.ENUM,
+        name="Engine run time",
+        native_unit_of_measurement=commands.ENGINE_RUN_TIME.units.__str__(),
+        device_class=SensorDeviceClass.DURATION,
+        state_class=SensorStateClass.TOTAL_INCREASING,
     ),
     "engine_speed": SensorEntityDescription(
         key=commands.ENGINE_SPEED,
@@ -54,6 +60,30 @@ SENSOR_TYPES: dict[str, SensorEntityDescription] = {
         native_unit_of_measurement=commands.ENGINE_SPEED.units.__str__(),
         suggested_display_precision=1,
         # device_class=SensorDeviceClass.REVOLUTION_PER_MINUTE,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    "catalyst_temp_bank_1_sensor_1": SensorEntityDescription(
+        key=commands.CATALYST_TEMP_BANK_1_SENSOR_1,
+        icon="mdi:gauge",
+        name="Catalyst Temperature Bank 1 Sensor 1",
+        native_unit_of_measurement=commands.CATALYST_TEMP_BANK_1_SENSOR_1.units.__str__(),
+        device_class=SensorDeviceClass.TEMPERATURE,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    "vehicle_voltage": SensorEntityDescription(
+        key=commands.VEHICLE_VOLTAGE,
+        icon="mdi:gauge",
+        name="Vehicle Voltage",
+        native_unit_of_measurement=commands.VEHICLE_VOLTAGE.units.__str__(),
+        device_class=SensorDeviceClass.VOLTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    "accelerator_position_relative": SensorEntityDescription(
+        key=commands.ACCELERATOR_POSITION_RELATIVE,
+        icon="mdi:gauge",
+        name="Accelerator Position Relative",
+        native_unit_of_measurement=commands.ACCELERATOR_POSITION_RELATIVE.units.__str__(),
+        device_class=SensorDeviceClass.POWER_FACTOR,
         state_class=SensorStateClass.MEASUREMENT,
     ),
 }
@@ -90,16 +120,25 @@ class ObdBleSensor(ObdBleEntity, SensorEntity):
         self._attr_native_unit_of_measurement = description.native_unit_of_measurement
         self._attr_state_class = description.state_class
 
-    async def async_update(self) -> None:
+    # async def async_update(self) -> None:
+    def _handle_coordinator_update(self) -> None:
         try:
             # data = await self.client.get_data()
             # data = self.coordinator.data.get(self._id)
-            data = self.coordinator.data.get(self._description.key)
+            data: Response | None = self.coordinator.data.get(self._description.key)
+            _LOGGER.debug("Updating sensor %s with data: %s", self._id, data)
         except Exception as ex:
+            _LOGGER.error(f"Error updating sensor {self._id}: {ex}")
             self._attr_available = False
         else:
-            self._attr_available = True
-            self._attr_native_value = data
+            if data is None:
+                _LOGGER.warning(f"No data available for sensor {self._id}")
+                self._attr_available = False
+            elif isinstance(data, Response):
+                self._attr_available = True
+                self._attr_native_value = data.value
+
+        super()._handle_coordinator_update()
 
     # @property
     # def native_value(self):
