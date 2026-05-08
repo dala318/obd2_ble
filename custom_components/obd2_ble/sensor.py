@@ -13,6 +13,7 @@ from homeassistant.components.sensor import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
+from .coordinator import Obd2BleDataUpdateCoordinator
 from .const import DOMAIN, NAME
 from .entity import ObdBleEntity
 
@@ -106,7 +107,7 @@ class ObdBleSensor(ObdBleEntity, SensorEntity):
 
     def __init__(
         self,
-        coordinator,
+        coordinator: Obd2BleDataUpdateCoordinator,
         config_entry,
         id: str,
         description: SensorEntityDescription,
