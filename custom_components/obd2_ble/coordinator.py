@@ -8,7 +8,7 @@ from homeassistant.components.bluetooth.api import async_address_present
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from obdii import Command, Connection, Protocol, Response, at_commands, commands
+from obdii import Command, Connection, Response, at_commands, commands
 
 from .const import DOMAIN
 
