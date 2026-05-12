@@ -8,7 +8,7 @@ from bleak_retry_connector import establish_connection, BleakClientWithServiceCa
 
 from threading import Lock, Event
 from time import monotonic
-from typing import Optional, Dict, Any, Coroutine, Union
+from typing import Optional, Dict, Any, Coroutine
 
 from obdii.transports.transport_base import TransportBase
 from obdii.basetypes import MISSING
