@@ -11,4 +11,7 @@ jobs:
     runs-on: "ubuntu-latest"
     steps:
       - uses: actions/checkout@v5
-      - uses: home-assistant/actions/hassfest@master
+      - name: Home Assitant Hassfest
+        uses: home-assistant/actions/hassfest@master
+      - name: Home Assistant Core Integration Check
+        uses: home-assistant/actions/core/int-check@master
