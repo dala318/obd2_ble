@@ -4,11 +4,17 @@ from datetime import timedelta
 import logging
 from typing import Any
 
+from bleak.backends.device import BLEDevice
+
 from homeassistant.components.bluetooth.api import async_address_present
+from homeassistant.components.bluetooth.const import DOMAIN as BLUETOOTH_DOMAIN
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConditionError
+from homeassistant.helpers.device_registry import CONNECTION_BLUETOOTH, DeviceInfo
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from obdii import Command, Connection, Protocol, Response, at_commands, commands
+from obdii import Command, Connection, Protocol, Response, at_commands, commands, __version__
+from .obdii.transport_ble import TransportBLE
 
 from .const import DOMAIN
 
@@ -43,7 +49,7 @@ class Obd2BleDataUpdateCoordinator(DataUpdateCoordinator):
     """Class to manage fetching data from the API."""
 
     def __init__(
-        self, hass: HomeAssistant, address: str, api: Connection, options
+        self, hass: HomeAssistant, device: BLEDevice, api: Connection, options
     ) -> None:
         """Initialize."""
         super().__init__(
@@ -53,10 +59,26 @@ class Obd2BleDataUpdateCoordinator(DataUpdateCoordinator):
             update_interval=FAST_POLL_INTERVAL,
             always_update=True,
         )
-        self._address = address
+        self._device: BLEDevice = device
         self.api = api
+        if not isinstance(api.transport, TransportBLE):
+            raise ConditionError("API transport is not of type TransportBLE")
+        self.transport: TransportBLE = api.transport  # Shortcut to typed instance
         self._cache_data: dict[str, Any] = {}
         self.options = options
+
+        # self.device_info = DeviceInfo(
+        #     identifiers={(DOMAIN, self._mac), (BLUETOOTH_DOMAIN, self._mac)},
+        #     connections={(CONNECTION_BLUETOOTH, self._mac)},
+        # )
+        # mac = device.address
+        self.device_info = DeviceInfo(
+            identifiers={(DOMAIN, device.address), (BLUETOOTH_DOMAIN, device.address)},
+            connections={(CONNECTION_BLUETOOTH, device.address)},
+            # name=NAME,
+            model_id=self.api.protocol.name,
+            sw_version=__version__,
+        )
 
         # Track which commands are active to avoid unnecessary polling of inactive commands
         self.active_commands: set[Command] = set()
@@ -66,7 +88,7 @@ class Obd2BleDataUpdateCoordinator(DataUpdateCoordinator):
 
         # Check if the device is still available
         _LOGGER.debug("Check if the device is still available")
-        available = async_address_present(self.hass, self._address, connectable=True)
+        available = async_address_present(self.hass, self._device.address, connectable=True)
         if not available:
             _LOGGER.debug("Car out of range? Switch to extra slow polling")
             self.update_interval = timedelta(seconds=self._xs_poll_interval)
@@ -99,7 +121,7 @@ class Obd2BleDataUpdateCoordinator(DataUpdateCoordinator):
                     _LOGGER.debug("Querying OBD2 for command %s", command)
                     response: Response = await self.hass.async_add_executor_job(self.api.query, command)
                     _LOGGER.debug("Received response for command %s: %s", command, response)
-                    new_data[command] = response
+                    new_data[str(command)] = response
                 except Exception as err:
                     _LOGGER.error(f"Error occurred while querying command {command}: {err}")
             if new_data is None:

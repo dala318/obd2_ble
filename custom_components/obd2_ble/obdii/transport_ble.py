@@ -8,7 +8,7 @@ from bleak_retry_connector import establish_connection, BleakClientWithServiceCa
 
 from threading import Lock, Event
 from time import monotonic
-from typing import Optional, Dict, Any, Coroutine, Union
+from typing import Optional, Dict, Any, Coroutine, TypedDict, Union
 
 from obdii.transports.transport_base import TransportBase
 from obdii.basetypes import MISSING
@@ -148,3 +148,10 @@ class TransportBLE(TransportBase):
             self._data_ready.clear()
 
         return snapshot
+    
+    def __enter__(self) -> "TransportBLE":
+        self.connect()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        self.close()

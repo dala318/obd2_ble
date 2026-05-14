@@ -3,6 +3,12 @@
   "name": "OBD2 BLE",
   "bluetooth": [
     {
+      "local_name": "OBD2"
+    },
+    {
+      "local_name": "OBDII"
+    },
+    {
       "service_uuid": "0000ffe0-0000-1000-8000-00805f9b34fb"
     },
     {
