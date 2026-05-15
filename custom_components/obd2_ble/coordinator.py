@@ -13,7 +13,7 @@ from homeassistant.exceptions import ConditionError
 from homeassistant.helpers.device_registry import CONNECTION_BLUETOOTH, DeviceInfo
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from obdii import Command, Connection, Protocol, Response, at_commands, commands, __version__
+from obdii import Command, Connection, Response, at_commands, commands, __version__
 from .obdii.transport_ble import TransportBLE
 
 from .const import DOMAIN

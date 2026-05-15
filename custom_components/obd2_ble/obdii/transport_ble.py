@@ -8,7 +8,7 @@ from bleak_retry_connector import establish_connection, BleakClientWithServiceCa
 
 from threading import Lock, Event
 from time import monotonic
-from typing import Optional, Dict, Any, Coroutine, TypedDict, Union
+from typing import Optional, Dict, Any, Coroutine
 
 from obdii.transports.transport_base import TransportBase
 from obdii.basetypes import MISSING
@@ -60,7 +60,7 @@ class TransportBLE(TransportBase):
             self._buffer.extend(data)
         self._data_ready.set()
 
-    async def _connect(self) -> None:
+    async def async_connect(self) -> None:
         _LOGGER.debug("Attempting to connect to BLE device %s (%s)", self._ble_device.name, self._ble_device.address)
         # self._ble_conn = BleakClient(self._ble_device)
         # await self._ble_conn.connect()
@@ -79,7 +79,7 @@ class TransportBLE(TransportBase):
             for characteristic in service.characteristics:
                 _LOGGER.debug("Discovered characteristic: %s", characteristic.uuid)
 
-    async def _close(self) -> None:
+    async def async_close(self) -> None:
         if self._ble_conn and self._ble_conn.is_connected:
             await self._ble_conn.stop_notify(self.config["uuid_read"])
             await self._ble_conn.disconnect()
@@ -102,7 +102,7 @@ class TransportBLE(TransportBase):
             self._loop = loop
 
         try:
-            self._run_coro(self._connect())
+            self._run_coro(self.async_connect())
         except Exception:
             self.close() # Cleanup on failure
             raise
@@ -110,7 +110,7 @@ class TransportBLE(TransportBase):
     def close(self) -> None:
         if self.is_connected():
             try:
-                self._run_coro(self._close())
+                self._run_coro(self.async_close())
             except Exception:
                 pass # Already disconnecting or loop is dead
 

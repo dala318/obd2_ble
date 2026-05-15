@@ -1,4 +1,4 @@
-name: Validate with hassfest
+name: Run Ruff
 
 on:
   push:
@@ -11,5 +11,5 @@ jobs:
     runs-on: "ubuntu-latest"
     steps:
       - uses: actions/checkout@v5
-      - name: Home Assitant Hassfest
-        uses: home-assistant/actions/hassfest@master
+      - name: Run Ruff
+        uses: astral-sh/ruff-action@v1

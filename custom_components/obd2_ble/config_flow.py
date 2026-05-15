@@ -11,21 +11,26 @@ except ImportError:  # pragma: no cover - fallback for missing dependency
     def human_readable_name(_manufacturer: str | None, name: str | None, address: str):
         """Fallback if bluetooth_data_tools is unavailable."""
         return name or address
+from dataclasses import dataclass
 import voluptuous as vol
 
+from bleak.backends.device import BLEDevice
 from bleak.backends.scanner import AdvertisementData
+from bleak.backends.characteristic import BleakGATTCharacteristic
+
 
 from homeassistant import config_entries
 from homeassistant.components.bluetooth import (
     BluetoothServiceInfoBleak,
+    async_ble_device_from_address,
     async_discovered_service_info,
 )
 from homeassistant.const import CONF_ADDRESS
 from homeassistant.core import callback
-from homeassistant.helpers.device_registry import format_mac
+from homeassistant.helpers import device_registry, selector
 
 from . import Obd2BleConfigEntry
-from .coordinator import Obd2BleDataUpdateCoordinator
+# from .coordinator import Obd2BleDataUpdateCoordinator
 from .const import (
     DOMAIN,
     CONF_SERVICE_UUID,
@@ -36,11 +41,99 @@ from .const import (
     DEFAULT_CHARACTERISTIC_UUID_WRITE,
 )
 from .device_identifier import AVAILABLE_OBD2_CLASSES, BaseOBD2, MatcherPattern
+from .obdii.transport_ble import TransportBLE
 
 _LOGGER = logging.getLogger(__name__)
 
 # LOCAL_NAMES = {"OBDBLE", "OBDII-BLE", "OBD2-BLE", "OBDII BLE", "OBD2 BLE", "IOS-Vlink"}
 LOCAL_NAMES = {"OBDBLE"}
+
+
+@dataclass
+class DiscoveredDevice:
+    """A discovered Bluetooth device."""
+
+    name: str
+    discovery_info: BluetoothServiceInfoBleak
+    type: str
+
+    def model(self) -> str:
+        """Return BMS type in capital letters, e.g. 'DUMMY OBDII'."""
+        return self.type.rsplit(".", 1)[1].replace("_", " ").upper()
+
+
+async def async_prepare_service_selection_schema(
+    transport: TransportBLE,
+) -> vol.Schema:
+    """Manage the options."""
+
+    # pid_commands = await coordinator.async_get_all_pid_commands()
+    # _LOGGER.debug("PID commands: %s", pid_commands)
+
+    service_collection = transport.get_service_collection()
+    for service in service_collection:
+        _LOGGER.debug("Discovered service: %s", service.uuid)
+        for characteristic in service.characteristics:
+            _LOGGER.debug("Discovered characteristic: %s", characteristic.uuid)
+
+    return vol.Schema(
+        {
+            vol.Required(CONF_SERVICE_UUID): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    # options=[{"value": k, "label": v} for k, v in service_map.items()],
+                    options=[
+                        {
+                            "value": service.uuid,
+                            "label": f"{service.description} {service.uuid.split('-')[0]}"
+                        } for service in service_collection],
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                    translation_key="ble_services",
+                )
+            ),
+        }
+    )
+
+
+async def async_prepare_characteristic_selection_schema(
+    transport: TransportBLE,
+    service_uuid: str,
+) -> vol.Schema:
+    """Manage the options."""
+
+    characteristics: list[BleakGATTCharacteristic] = []
+    for service in  transport.get_service_collection():
+        if service.uuid == service_uuid:
+            _LOGGER.debug("Discovered service: %s", service.uuid)
+            characteristics = service.characteristics
+            break
+    if not characteristics:
+        raise ValueError(f"No characteristics found for service: {service_uuid}")
+    return vol.Schema(
+        {
+            vol.Required(CONF_CHARACTERISTIC_UUID_READ): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[
+                        {
+                            "value": characteristic.uuid,
+                            "label": f"{characteristic.description} {characteristic.uuid.split('-')[0]}"
+                        } for characteristic in characteristics],
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                    translation_key="ble_read_characteristics",
+                )
+            ),
+            vol.Required(CONF_CHARACTERISTIC_UUID_WRITE): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[
+                        {
+                            "value": characteristic.uuid,
+                            "label": f"{characteristic.description} {characteristic.uuid.split('-')[0]}"
+                        } for characteristic in characteristics],
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                    translation_key="ble_write_characteristics",
+                )
+            ),
+        }
+    )
 
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -54,6 +147,12 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._errors = {}
         self._discovery_info: BluetoothServiceInfoBleak | None = None
         self._discovered_devices: dict[str, BluetoothServiceInfoBleak] = {}
+        # self._discovered_devices: dict[str, DiscoveredDevice] = {}
+        self._service_uuid: str = DEFAULT_SERVICE_UUID
+        self._characteristic_uuid_read: str = DEFAULT_CHARACTERISTIC_UUID_READ
+        self._characteristic_uuid_write: str = DEFAULT_CHARACTERISTIC_UUID_WRITE
+
+        self._transport: TransportBLE | None = None
 
     @staticmethod
     @callback
@@ -106,7 +205,6 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             and not re.compile(translate(local_name)).match(adv_data.local_name or "")
         )
 
-
     async def _async_device_supported(
         self, discovery_info: BluetoothServiceInfoBleak
     ) -> type[BaseOBD2] | None:
@@ -116,7 +214,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 _LOGGER.debug(
                     "Device %s (%s) detected as '%s'",
                     discovery_info.name,
-                    format_mac(discovery_info.address),
+                    device_registry.format_mac(discovery_info.address),
                     # obd2_class.obd2_id(),
                     obd2_class.__name__,
                 )
@@ -146,19 +244,25 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            address = user_input[CONF_ADDRESS]
-            discovery_info = self._discovered_devices[address]
-            local_name = discovery_info.name
+            self._discovery_info = self._discovered_devices[user_input[CONF_ADDRESS]]
             await self.async_set_unique_id(
-                discovery_info.address, raise_on_progress=False
+                self._discovery_info.address, raise_on_progress=False
             )
             self._abort_if_unique_id_configured()
-            return self.async_create_entry(
-                title=local_name,
-                data={
-                    CONF_ADDRESS: discovery_info.address,
-                },
+
+            ble_device: BLEDevice | None = async_ble_device_from_address(
+                self.hass, self._discovery_info.address, True
             )
+            assert ble_device is not None, "Device disappeared after selection - this should not happen"
+            self._transport = TransportBLE(
+                ble_device=ble_device,
+                uuid_write=self._characteristic_uuid_write,
+                uuid_read=self._characteristic_uuid_read,
+                loop=self.hass.loop,
+            )
+            await self._transport.async_connect()
+
+            return await self.async_step_service()
 
         if discovery := self._discovery_info:
             self._discovered_devices[discovery.address] = discovery
@@ -168,10 +272,10 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 if (
                     discovery.address in current_addresses
                     or discovery.address in self._discovered_devices
-                    or not any(
-                        discovery.name.startswith(local_name)
-                        for local_name in LOCAL_NAMES
-                    )
+                    # or not any(
+                    #     discovery.name.startswith(local_name)
+                    #     for local_name in LOCAL_NAMES
+                    # )
                     or not (obd2_class := await self._async_device_supported(discovery))
                 ):
                     continue
@@ -196,6 +300,52 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
+    async def async_step_service(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Manage the options."""
+
+        if user_input is not None:
+            self._service_uuid = user_input[CONF_SERVICE_UUID]
+            return await self.async_step_characteristic()
+        
+        assert self._transport is not None, "Transport should have been initialized by now"
+        return self.async_show_form(
+            step_id="service",
+            data_schema=await async_prepare_service_selection_schema(self._transport)
+        )
+
+    async def async_step_characteristic(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Manage the options."""
+        # if not self.options:
+        #     self.options = dict(self.config_entry.options)
+
+        if user_input is not None:
+            self._characteristic_uuid_read = user_input[CONF_CHARACTERISTIC_UUID_READ]
+            self._characteristic_uuid_write = user_input[CONF_CHARACTERISTIC_UUID_WRITE]
+            assert self._transport is not None, "Transport should have been initialized by now"
+            await self._transport.async_close()
+            assert self._discovery_info is not None, "Discovery info should have been set by now"
+            return self.async_create_entry(
+                title= self._discovery_info.name,
+                data={
+                    CONF_ADDRESS: self._discovery_info.address,
+                    CONF_SERVICE_UUID: self._service_uuid,
+                    CONF_CHARACTERISTIC_UUID_READ: self._characteristic_uuid_read,
+                    CONF_CHARACTERISTIC_UUID_WRITE: self._characteristic_uuid_write,
+                },
+            )
+        
+        assert self._transport is not None, "Transport should have been initialized by now"
+        return self.async_show_form(
+            step_id="characteristic",
+            data_schema=await async_prepare_characteristic_selection_schema(self._transport, self._service_uuid)
+        )
+
+    async def async_step_reconfigure(self, user_input: dict | None = None) -> config_entries.ConfigFlowResult:
+        return await self.async_step_service(user_input)
 
 class Obd2BleOptionsFlowHandler(config_entries.OptionsFlow):
     """Config flow options handler for obd2_ble."""
@@ -214,23 +364,7 @@ class Obd2BleOptionsFlowHandler(config_entries.OptionsFlow):
         if user_input is not None:
             self.options.update(user_input)
             return await self._update_options()
-
-        # # Check if runtime_data exists (Python 3.10+ way)
-        # if hasattr(self.config_entry, "runtime_data"):
-        #     coordinator = self.config_entry.runtime_data.coordinator
-        # else:
-        #     # Fallback to the old way where DOMAIN is your integration slug
-        #     coordinator = self.hass.data[DOMAIN][self.config_entry.entry_id]
-        # coordinator: Obd2BleDataUpdateCoordinator = self.hass.data[DOMAIN][self.config_entry.entry_id]
-        coordinator: Obd2BleDataUpdateCoordinator = self.config_entry.runtime_data
-        pid_commands = await coordinator.async_get_all_pid_commands()
-        _LOGGER.debug("PID commands: %s", pid_commands)
-        service_collection = coordinator.transport.get_service_collection()
-        for service in service_collection:
-            _LOGGER.debug("Discovered service: %s", service.uuid)
-            for characteristic in service.characteristics:
-                _LOGGER.debug("Discovered characteristic: %s", characteristic.uuid)
-
+        
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema(
@@ -247,21 +381,21 @@ class Obd2BleOptionsFlowHandler(config_entries.OptionsFlow):
                     vol.Required(
                         "xs_poll", default=self.options.get("xs_poll", 3600)
                     ): int,
-                    vol.Optional(
-                        CONF_SERVICE_UUID,
-                        default=self.options.get(CONF_SERVICE_UUID)
-                        or DEFAULT_SERVICE_UUID,
-                    ): str,
-                    vol.Optional(
-                        CONF_CHARACTERISTIC_UUID_READ,
-                        default=self.options.get(CONF_CHARACTERISTIC_UUID_READ)
-                        or DEFAULT_CHARACTERISTIC_UUID_READ,
-                    ): str,
-                    vol.Optional(
-                        CONF_CHARACTERISTIC_UUID_WRITE,
-                        default=self.options.get(CONF_CHARACTERISTIC_UUID_WRITE)
-                        or DEFAULT_CHARACTERISTIC_UUID_WRITE,
-                    ): str,
+                    # vol.Optional(
+                    #     CONF_SERVICE_UUID,
+                    #     default=self.options.get(CONF_SERVICE_UUID)
+                    #     or DEFAULT_SERVICE_UUID,
+                    # ): str,
+                    # vol.Optional(
+                    #     CONF_CHARACTERISTIC_UUID_READ,
+                    #     default=self.options.get(CONF_CHARACTERISTIC_UUID_READ)
+                    #     or DEFAULT_CHARACTERISTIC_UUID_READ,
+                    # ): str,
+                    # vol.Optional(
+                    #     CONF_CHARACTERISTIC_UUID_WRITE,
+                    #     default=self.options.get(CONF_CHARACTERISTIC_UUID_WRITE)
+                    #     or DEFAULT_CHARACTERISTIC_UUID_WRITE,
+                    # ): str,
                 }
             ),
         )
