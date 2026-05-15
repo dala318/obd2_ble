@@ -8,11 +8,11 @@ import logging
 from typing_extensions import Final
 
 from bleak.backends.device import BLEDevice
-from bleak_retry_connector import BleakClientWithServiceCache, establish_connection, get_device
+# from bleak_retry_connector import BleakClientWithServiceCache, establish_connection, get_device
 
 from homeassistant.components import bluetooth
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_ADDRESS
+# from homeassistant.const import CONF_ADDRESS
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryNotReady, ConfigEntryError
 from homeassistant.helpers.config_validation import config_entry_only_config_schema
@@ -75,7 +75,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: Obd2BleConfigEntry) -> b
     # )
     # if ble_conn is None:
     #     raise ConnectionError(f"Failed to connect to BLE device {ble_device.address}")
-    uuid_write = DEFAULT_CHARACTERISTIC_UUID_READ
+    uuid_write = DEFAULT_CHARACTERISTIC_UUID_WRITE
     uuid_read = DEFAULT_CHARACTERISTIC_UUID_READ
     # with TransportBLE(
     #     ble_device=ble_device,

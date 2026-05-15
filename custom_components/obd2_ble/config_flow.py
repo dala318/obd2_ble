@@ -228,7 +228,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         await self.async_set_unique_id(discovery_info.address)
         self._abort_if_unique_id_configured()
 
-        if not (obd2_class := await self._async_device_supported(discovery_info)):
+        # if not (obd2_class := await self._async_device_supported(discovery_info)):
+        if not (await self._async_device_supported(discovery_info)):
             return self.async_abort(reason="not_supported")
 
         self._discovery_info = discovery_info
@@ -276,7 +277,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     #     discovery.name.startswith(local_name)
                     #     for local_name in LOCAL_NAMES
                     # )
-                    or not (obd2_class := await self._async_device_supported(discovery))
+                    or not (await self._async_device_supported(discovery))
+                    # or not (obd2_class := await self._async_device_supported(discovery))
                 ):
                     continue
                 self._discovered_devices[discovery.address] = discovery

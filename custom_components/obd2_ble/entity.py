@@ -3,13 +3,13 @@
 import logging
 
 from homeassistant.const import CONF_ADDRESS
-from homeassistant.components.bluetooth.const import DOMAIN as BLUETOOTH_DOMAIN
+# from homeassistant.components.bluetooth.const import DOMAIN as BLUETOOTH_DOMAIN
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from homeassistant.helpers.device_registry import CONNECTION_BLUETOOTH, DeviceInfo
+# from homeassistant.helpers.device_registry import CONNECTION_BLUETOOTH, DeviceInfo
 import obdii
 
 from .coordinator import Obd2BleDataUpdateCoordinator
-from .const import DOMAIN, NAME
+# from .const import DOMAIN, NAME
 
 _LOGGER = logging.getLogger(__name__)
 

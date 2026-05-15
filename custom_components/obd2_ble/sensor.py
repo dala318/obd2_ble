@@ -1,7 +1,7 @@
 """Sensor platform for OBD2 BLE."""
 
 import logging
-from typing import Any
+# from typing import Any
 
 from obdii import Command, Response, commands
 
@@ -11,14 +11,14 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
     SensorStateClass,
 )
-from homeassistant.config_entries import ConfigEntry
+# from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.const import EntityCategory
+# from homeassistant.const import EntityCategory
 
 from custom_components.obd2_ble import Obd2BleConfigEntry
 
 from .coordinator import Obd2BleDataUpdateCoordinator
-from .const import DOMAIN, NAME
+# from .const import DOMAIN, NAME
 from .entity import ObdBleEntity
 
 _LOGGER = logging.getLogger(__name__)
