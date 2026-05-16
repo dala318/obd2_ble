@@ -68,6 +68,16 @@ class Obd2BleDataUpdateCoordinator(DataUpdateCoordinator):
         # Track which commands are active to avoid unnecessary polling of inactive commands
         self.active_commands: set[Command] = set()
 
+    def shutdown(self) -> None:
+        """Clean up resources when the coordinator is unloaded."""
+        _LOGGER.debug("Shutting down coordinator for device %s", self._device.address)
+        try:
+            self.api.close()
+        except Exception as err:
+            _LOGGER.warning(f"Error occurred while closing API connection: {err}")
+        else:
+            _LOGGER.debug("API connection closed successfully")
+
     async def _async_update_data(self) -> dict[str, Any]:
         """Update data via library."""
 
@@ -76,7 +86,7 @@ class Obd2BleDataUpdateCoordinator(DataUpdateCoordinator):
         available = async_address_present(self.hass, self._device.address, connectable=True)
         if not available:
             _LOGGER.debug("Car out of range? Switch to extra slow polling")
-            self.update_interval = timedelta(seconds=self._xs_poll_interval)
+            self.update_interval = timedelta(seconds=self.options.get(CONF_XS_POLL, DEFAULT_XS_POLL))
             _LOGGER.debug(
                 "Car out of range? Switch to ultra slow polling: interval = %s",
                 self.update_interval,
@@ -121,13 +131,13 @@ class Obd2BleDataUpdateCoordinator(DataUpdateCoordinator):
             if new_data is None:
                 raise UpdateFailed("Failed to connect to OBD device")
             if len(new_data) == 0:
-                self.update_interval = timedelta(seconds=self._slow_poll_interval)
+                self.update_interval = timedelta(seconds=self.options.get(CONF_SLOW_POLL, DEFAULT_SLOW_POLL))
                 _LOGGER.debug(
                     "Car is probably off, switch to slow polling: interval = %s",
                     self.update_interval,
                 )
             else:
-                self.update_interval = timedelta(seconds=self._fast_poll_interval)
+                self.update_interval = timedelta(seconds=self.options.get(CONF_FAST_POLL, DEFAULT_FAST_POLL))
                 _LOGGER.debug(
                     "Car is on, polling: interval = %s",
                     self.update_interval,
@@ -164,17 +174,3 @@ class Obd2BleDataUpdateCoordinator(DataUpdateCoordinator):
         _LOGGER.info(f"Supported Commands: {supported_cmds}")
 
         return supported_pids, supported_cmds
-
-    @property
-    def options(self):
-        """User configuration options."""
-        return self._options
-
-    @options.setter
-    def options(self, options):
-        """Set the configuration options."""
-        self._options = options
-        self._fast_poll_interval = options.get(CONF_FAST_POLL, DEFAULT_FAST_POLL)
-        self._slow_poll_interval = options.get(CONF_SLOW_POLL, DEFAULT_SLOW_POLL)
-        self._xs_poll_interval = options.get(CONF_XS_POLL, DEFAULT_XS_POLL)
-        self._cache_values = options.get(CONF_CACHED_VALUES, DEFAULT_CACHED_VALUES)

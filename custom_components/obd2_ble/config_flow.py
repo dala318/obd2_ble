@@ -391,6 +391,14 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             await self._transport.async_connect()
         return await self.async_step_service(user_input)
 
+    @callback
+    def async_remove(self) -> None:
+        """Handle flow removal/cancellation."""
+        if self._transport and self._transport.is_connected():
+            _LOGGER.debug("Config flow cancelled/removed. Forcing BLE disconnect.")
+            self._transport.close()
+        super().async_remove()
+
 class Obd2BleOptionsFlowHandler(config_entries.OptionsFlowWithReload):
     """Config flow options handler for obd2_ble."""
 

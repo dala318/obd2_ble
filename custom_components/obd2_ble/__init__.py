@@ -108,15 +108,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: Obd2BleConfigEntry) -> b
         )  # does the register callback, and returns a cancel callback for cleanup
     )
 
-    # async def update_options_listener(hass: HomeAssistant | None, entry: ConfigEntry):
-    #     """Handle options update."""
-    #     coordinator.options = entry.options
-
-    # entry.async_on_unload(
-    #     entry.add_update_listener(update_options_listener)
-    # )  # add the listener for when the user changes options
-
-    # entry.add_update_listener(async_reload_entry)
     return True
 
 
@@ -127,11 +118,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: Obd2BleConfigEntry) -> 
     )
     _LOGGER.debug("Unloaded config entry: %s, ok? %s!", entry.unique_id, unloaded)
     if unloaded and getattr(entry, "runtime_data", None) is not None:
+        entry.runtime_data.shutdown()
         await entry.runtime_data.async_shutdown()
     return unloaded
-
-
-# async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
-#     """Reload config entry."""
-#     await async_unload_entry(hass, entry)
-#     await async_setup_entry(hass, entry)
