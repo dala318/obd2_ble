@@ -35,7 +35,6 @@ from .coordinator import DEFAULT_SLOW_POLL, DEFAULT_XS_POLL, Obd2BleDataUpdateCo
 from .const import (
     CONF_AUTO_CONFIGURE,
     CONF_CACHED_VALUES,
-    CONF_CACHED_VALUES,
     CONF_FAST_POLL,
     CONF_SLOW_POLL,
     CONF_XS_POLL,
