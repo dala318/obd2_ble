@@ -56,28 +56,18 @@ class TransportBLE(TransportBase):
     
     def _notify_callback(self, _, data: bytearray) -> None:
         with self._lock:
-            _LOGGER.debug("Data in callback: %s", data)
             self._buffer.extend(data)
         self._data_ready.set()
 
     async def async_connect(self) -> None:
         _LOGGER.debug("Attempting to connect to BLE device %s (%s)", self._ble_device.name, self._ble_device.address)
-        # self._ble_conn = BleakClient(self._ble_device)
-        # await self._ble_conn.connect()
         self._ble_conn = await establish_connection(
             BleakClientWithServiceCache,
             self._ble_device,
             self._ble_device.name or "Unknown Device",
             max_attempts=3
         )
-        # if self._ble_conn is None:
-        #     raise ConnectionError(f"Failed to connect to BLE device {self._ble_device.address}")
-        
         await self._ble_conn.start_notify(self.config["uuid_read"], self._notify_callback)
-        # for service in self._ble_conn.services:
-        #     _LOGGER.debug("Discovered service: %s", service.uuid)
-        #     for characteristic in service.characteristics:
-        #         _LOGGER.debug("Discovered characteristic: %s", characteristic.uuid)
 
     async def async_close(self) -> None:
         if self._ble_conn and self._ble_conn.is_connected:

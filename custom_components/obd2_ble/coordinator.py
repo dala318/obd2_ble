@@ -68,9 +68,10 @@ class Obd2BleDataUpdateCoordinator(DataUpdateCoordinator):
         # Track which commands are active to avoid unnecessary polling of inactive commands
         self.active_commands: set[Command] = set()
 
-    def shutdown(self) -> None:
-        """Clean up resources when the coordinator is unloaded."""
-        _LOGGER.debug("Shutting down coordinator for device %s", self._device.address)
+    async def async_shutdown(self) -> None:
+        """Shutdown coordinator and any connection."""
+        _LOGGER.debug("Shutting down BMS (%s)", self.name)
+        await super().async_shutdown()
         try:
             self.api.close()
         except Exception as err:

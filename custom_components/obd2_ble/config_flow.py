@@ -409,14 +409,27 @@ class Obd2BleOptionsFlowHandler(config_entries.OptionsFlowWithReload):
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.ConfigFlowResult:
-        """Manage the options."""
+        """First step: Display the built-in option menu selection."""
         if not self._options:
             self._options = dict(self.config_entry.options)
 
+        # Home Assistant takes a list of step IDs and renders them as a menu.
+        # Clicking a button automatically calls async_step_<step_id>
+        return self.async_show_menu(
+            step_id="init",
+            menu_options=["polling", "protocol", "commands"],
+            description_placeholders={
+                "polling": "Configure polling intervals for different device states",
+                "protocol": "Select the OBD-II protocol to use",
+                "commands": "Configure custom OBD-II commands"
+            }
+        )
+
+    async def async_step_polling(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+
         if user_input is not None:
-            if user_input.get(CONF_PROTOCOL) is not None:
-                # user_input[CONF_PROTOCOL] = Protocol(int(user_input[CONF_PROTOCOL]))
-                user_input[CONF_PROTOCOL] = int(user_input[CONF_PROTOCOL])
             self._options.update(user_input)
             return self.async_create_entry(
                 title=self.config_entry.data.get(CONF_ADDRESS),
@@ -424,7 +437,7 @@ class Obd2BleOptionsFlowHandler(config_entries.OptionsFlowWithReload):
             )
         
         return self.async_show_form(
-            step_id="init",
+            step_id="polling",
             data_schema=vol.Schema(
                 {
                     vol.Required(
@@ -439,6 +452,28 @@ class Obd2BleOptionsFlowHandler(config_entries.OptionsFlowWithReload):
                     vol.Required(
                         CONF_XS_POLL, default=self._options.get(CONF_XS_POLL, DEFAULT_XS_POLL)
                     ): int,
+                }
+            ),
+        )
+
+    async def async_step_protocol(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+
+        if user_input is not None:
+            if user_input.get(CONF_PROTOCOL) is not None:
+                # user_input[CONF_PROTOCOL] = Protocol(int(user_input[CONF_PROTOCOL]))
+                user_input[CONF_PROTOCOL] = int(user_input[CONF_PROTOCOL])
+            self._options.update(user_input)
+            return self.async_create_entry(
+                title=self.config_entry.data.get(CONF_ADDRESS),
+                data=self._options,
+            )
+        
+        return self.async_show_form(
+            step_id="protocol",
+            data_schema=vol.Schema(
+                {
                     vol.Required(CONF_PROTOCOL, default=str(self._options.get(CONF_PROTOCOL, Protocol.AUTO.value))): selector.SelectSelector(
                         selector.SelectSelectorConfig(
                             options=[
@@ -452,4 +487,23 @@ class Obd2BleOptionsFlowHandler(config_entries.OptionsFlowWithReload):
                     ),
                 }
             ),
+        )
+
+    async def async_step_commands(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+
+        if user_input is not None:
+            # if user_input.get(CONF_PROTOCOL) is not None:
+            #     # user_input[CONF_PROTOCOL] = Protocol(int(user_input[CONF_PROTOCOL]))
+            #     user_input[CONF_PROTOCOL] = int(user_input[CONF_PROTOCOL])
+            self._options.update(user_input)
+            # return self.async_create_entry(
+            #     title=self.config_entry.data.get(CONF_ADDRESS),
+            #     data=self._options,
+            # )
+        
+        return self.async_show_form(
+            step_id="commands",
+            data_schema=await async_prepare_command_selection_schema(self.config_entry.runtime_data),
         )

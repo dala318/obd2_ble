@@ -95,7 +95,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: Obd2BleConfigEntry) -> b
     ) -> None:
         """Handle re-discovery of the device."""
         _LOGGER.debug("New service_info: %s - %s", service_info, change)
-        # have just discovered the device is back in range - ping the coordinator to update immediately
         hass.async_create_task(coordinator.async_request_refresh())
 
     # stuff to do when cleaning up
@@ -118,6 +117,5 @@ async def async_unload_entry(hass: HomeAssistant, entry: Obd2BleConfigEntry) -> 
     )
     _LOGGER.debug("Unloaded config entry: %s, ok? %s!", entry.unique_id, unloaded)
     if unloaded and getattr(entry, "runtime_data", None) is not None:
-        entry.runtime_data.shutdown()
         await entry.runtime_data.async_shutdown()
     return unloaded
