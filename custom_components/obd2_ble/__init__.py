@@ -25,6 +25,7 @@ from .const import (
     DEFAULT_CHARACTERISTIC_UUID_WRITE,
     CONF_CHARACTERISTIC_UUID_READ,
     CONF_CHARACTERISTIC_UUID_WRITE,
+    CONF_PROTOCOL,
     DOMAIN,
     PLATFORMS,
     STARTUP_MESSAGE
@@ -89,8 +90,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: Obd2BleConfigEntry) -> b
 
     transport = TransportBLE(
         ble_device=ble_device,
-        uuid_write=entry.options.get(CONF_CHARACTERISTIC_UUID_WRITE, uuid_write),
-        uuid_read=entry.options.get(CONF_CHARACTERISTIC_UUID_READ, uuid_read),
+        uuid_write=entry.data.get(CONF_CHARACTERISTIC_UUID_WRITE, uuid_write),
+        uuid_read=entry.data.get(CONF_CHARACTERISTIC_UUID_READ, uuid_read),
         # timeout=entry.options.get("timeout", 10.0),
         loop = hass.loop,
     )
@@ -98,7 +99,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: Obd2BleConfigEntry) -> b
     api = Connection(
         transport=transport,
         auto_connect=False,
-        protocol=Protocol.ISO_15765_4_CAN_B,
+        # protocol=Protocol.ISO_15765_4_CAN_B,
+        protocol=entry.options.get(CONF_PROTOCOL, Protocol.AUTO),
         # log_handler=_LOGGER.handlers[0],
         log_level=logging.DEBUG,
     )

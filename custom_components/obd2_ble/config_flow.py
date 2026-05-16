@@ -18,6 +18,7 @@ from bleak.backends.device import BLEDevice
 from bleak.backends.scanner import AdvertisementData
 from bleak.backends.characteristic import BleakGATTCharacteristic
 
+from obdii.protocol import Protocol
 
 from homeassistant import config_entries
 from homeassistant.components.bluetooth import (
@@ -30,12 +31,14 @@ from homeassistant.core import callback
 from homeassistant.helpers import device_registry, selector
 
 from . import Obd2BleConfigEntry
-# from .coordinator import Obd2BleDataUpdateCoordinator
+from .coordinator import Obd2BleDataUpdateCoordinator
 from .const import (
+    CONF_AUTO_CONFIGURE,
     DOMAIN,
     CONF_SERVICE_UUID,
     CONF_CHARACTERISTIC_UUID_READ,
     CONF_CHARACTERISTIC_UUID_WRITE,
+    CONF_PROTOCOL,
     DEFAULT_SERVICE_UUID,
     DEFAULT_CHARACTERISTIC_UUID_READ,
     DEFAULT_CHARACTERISTIC_UUID_WRITE,
@@ -44,9 +47,6 @@ from .device_identifier import AVAILABLE_OBD2_CLASSES, BaseOBD2, MatcherPattern
 from .obdii.transport_ble import TransportBLE
 
 _LOGGER = logging.getLogger(__name__)
-
-# LOCAL_NAMES = {"OBDBLE", "OBDII-BLE", "OBD2-BLE", "OBDII BLE", "OBD2 BLE", "IOS-Vlink"}
-LOCAL_NAMES = {"OBDBLE"}
 
 
 @dataclass
@@ -132,6 +132,32 @@ async def async_prepare_characteristic_selection_schema(
                     translation_key="ble_write_characteristics",
                 )
             ),
+        }
+    )
+
+
+async def async_prepare_command_selection_schema(
+    coordinator: Obd2BleDataUpdateCoordinator,
+) -> vol.Schema:
+    """Manage the options."""
+
+    pid_commands = await coordinator.async_get_all_pid_commands()
+    _LOGGER.debug("PID commands: %s", pid_commands)
+
+    return vol.Schema(
+        {
+            # vol.Required(CONF_SERVICE_UUID): selector.SelectSelector(
+            #     selector.SelectSelectorConfig(
+            #         # options=[{"value": k, "label": v} for k, v in service_map.items()],
+            #         options=[
+            #             {
+            #                 "value": service.uuid,
+            #                 "label": f"{service.description} {service.uuid.split('-')[0]}"
+            #             } for service in service_collection],
+            #         mode=selector.SelectSelectorMode.DROPDOWN,
+            #         translation_key="ble_services",
+            #     )
+            # ),
         }
     )
 
@@ -263,6 +289,17 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
             await self._transport.async_connect()
 
+            if user_input.get(CONF_AUTO_CONFIGURE, True):
+                if obdii_dev := await self._async_device_supported(self._discovery_info):
+                    _LOGGER.debug("Auto-configuring device %s using class %s", self._discovery_info.name, obdii_dev.__name__)
+                    self._service_uuid = obdii_dev.uuid_service()
+                    self._characteristic_uuid_read = obdii_dev.uuid_rx()
+                    self._characteristic_uuid_write = obdii_dev.uuid_tx()
+                    raise NotImplementedError("Auto-configuration based on device class is not fully implemented yet")
+                    # TODO: Add validation that the service and characteristics actually exist on the device, and fall back to manual selection if not
+                else:
+                    _LOGGER.warning("Device %s does not match any known OBD2 classes, auto-configuration may fail", self._discovery_info.name)
+
             return await self.async_step_service()
 
         if discovery := self._discovery_info:
@@ -273,10 +310,6 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 if (
                     discovery.address in current_addresses
                     or discovery.address in self._discovered_devices
-                    # or not any(
-                    #     discovery.name.startswith(local_name)
-                    #     for local_name in LOCAL_NAMES
-                    # )
                     or not (await self._async_device_supported(discovery))
                     # or not (obd2_class := await self._async_device_supported(discovery))
                 ):
@@ -294,6 +327,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         for service_info in self._discovered_devices.values()
                     }
                 ),
+                vol.Required(
+                    CONF_AUTO_CONFIGURE, default=True
+                ): bool,
             }
         )
         return self.async_show_form(
@@ -311,7 +347,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self._service_uuid = user_input[CONF_SERVICE_UUID]
             return await self.async_step_characteristic()
         
-        assert self._transport is not None, "Transport should have been initialized by now"
+        assert self._transport is not None and self._transport.is_connected(), "Transport should have been initialized and connected by now"
         return self.async_show_form(
             step_id="service",
             data_schema=await async_prepare_service_selection_schema(self._transport)
@@ -327,7 +363,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             self._characteristic_uuid_read = user_input[CONF_CHARACTERISTIC_UUID_READ]
             self._characteristic_uuid_write = user_input[CONF_CHARACTERISTIC_UUID_WRITE]
-            assert self._transport is not None, "Transport should have been initialized by now"
+            assert self._transport is not None and self._transport.is_connected(), "Transport should have been initialized and connected by now"
             await self._transport.async_close()
             assert self._discovery_info is not None, "Discovery info should have been set by now"
             return self.async_create_entry(
@@ -340,7 +376,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 },
             )
         
-        assert self._transport is not None, "Transport should have been initialized by now"
+        assert self._transport is not None and self._transport.is_connected(), "Transport should have been initialized and connected by now"
         return self.async_show_form(
             step_id="characteristic",
             data_schema=await async_prepare_characteristic_selection_schema(self._transport, self._service_uuid)
@@ -364,6 +400,8 @@ class Obd2BleOptionsFlowHandler(config_entries.OptionsFlow):
             self.options = dict(self.config_entry.options)
 
         if user_input is not None:
+            if user_input.get(CONF_PROTOCOL) is not None:
+                user_input[CONF_PROTOCOL] = Protocol(int(user_input[CONF_PROTOCOL]))
             self.options.update(user_input)
             return await self._update_options()
         
@@ -383,6 +421,17 @@ class Obd2BleOptionsFlowHandler(config_entries.OptionsFlow):
                     vol.Required(
                         "xs_poll", default=self.options.get("xs_poll", 3600)
                     ): int,
+                    vol.Required(CONF_PROTOCOL): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=[
+                                {
+                                    "value": str(protocol.value),
+                                    "label": f"{protocol.name} ({protocol.value})"
+                                } for protocol in Protocol],
+                            mode=selector.SelectSelectorMode.DROPDOWN,
+                            translation_key="obdii_protocol",
+                        )
+                    ),
                     # vol.Optional(
                     #     CONF_SERVICE_UUID,
                     #     default=self.options.get(CONF_SERVICE_UUID)

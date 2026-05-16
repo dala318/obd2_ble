@@ -16,12 +16,14 @@ PLATFORMS: list[Platform] = [Platform.SENSOR]
 
 
 # Configuration and options
-CONF_ENABLED = "enabled"
-CONF_USERNAME = "username"
-CONF_PASSWORD = "password"
-CONF_SERVICE_UUID = "service_uuid"
+CONF_AUTO_CONFIGURE = "auto_configure"
 CONF_CHARACTERISTIC_UUID_READ = "characteristic_uuid_read"
 CONF_CHARACTERISTIC_UUID_WRITE = "characteristic_uuid_write"
+CONF_ENABLED = "enabled"
+# CONF_USERNAME = "username"
+# CONF_PASSWORD = "password"
+CONF_PROTOCOL = "protocol"
+CONF_SERVICE_UUID = "service_uuid"
 
 # Defaults
 DEFAULT_NAME = DOMAIN

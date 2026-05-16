@@ -22,8 +22,10 @@ class BaseOBD2(ABC):
 
     @staticmethod
     @abstractmethod
-    def uuid_services() -> tuple[str, ...]:
-        """Return list of 128-bit UUIDs of services required by BMS."""
+    # def uuid_services() -> tuple[str, ...]:
+    #     """Return list of 128-bit UUIDs of used services."""
+    def uuid_service() -> str:
+        """Return 128-bit UUID of used service."""
 
     @staticmethod
     @abstractmethod
@@ -44,8 +46,8 @@ class OBD2_BLE(BaseOBD2):
         return [{"local_name": "OBDII"}]
 
     @staticmethod
-    def uuid_services() -> tuple[str, ...]:
-        return ("0000fff0-0000-1000-8000-00805f9b34fb",)
+    def uuid_service() -> str:
+        return "0000fff0-0000-1000-8000-00805f9b34fb"
 
     @staticmethod
     def uuid_rx() -> str:
@@ -63,8 +65,8 @@ class VlinkOBD2_BLE(OBD2_BLE):
         return [{"local_name": "Vlink*"}]
 
     @staticmethod
-    def uuid_services() -> tuple[str, ...]:
-        return ("000018f0-0000-1000-8000-00805f9b34fb",)
+    def uuid_service() -> str:
+        return "000018f0-0000-1000-8000-00805f9b34fb"
 
     @staticmethod
     def uuid_rx() -> str:
