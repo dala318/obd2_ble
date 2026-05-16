@@ -6,6 +6,8 @@ from typing import Any
 
 from bleak.backends.device import BLEDevice
 
+from obdii import Command, Connection, Response, at_commands, commands, __version__
+
 from homeassistant.components.bluetooth.api import async_address_present
 from homeassistant.components.bluetooth.const import DOMAIN as BLUETOOTH_DOMAIN
 from homeassistant.core import HomeAssistant
@@ -13,37 +15,25 @@ from homeassistant.exceptions import ConditionError
 from homeassistant.helpers.device_registry import CONNECTION_BLUETOOTH, DeviceInfo
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from obdii import Command, Connection, Response, at_commands, commands, __version__
+from .const import (
+    CONF_CACHED_VALUES,
+    CONF_FAST_POLL,
+    CONF_SLOW_POLL,
+    CONF_XS_POLL,
+    DOMAIN,
+    FAST_POLL_INTERVAL,
+    DEFAULT_FAST_POLL,
+    DEFAULT_SLOW_POLL,
+    DEFAULT_XS_POLL,
+    DEFAULT_CACHED_VALUES
+)
 from .obdii.transport_ble import TransportBLE
-
-from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
-# when the device is in range, and the car is on, poll quickly to get
-# as much data as we can before it turns off
-FAST_POLL_INTERVAL = timedelta(seconds=10)
-
-# when the device is in range, but the car is off, we need to poll
-# occasionally to see whether the car has be turned back on. On some cars
-# this causes a relay to click every time, so this interval needs to be
-# as long as possible to prevent excessive wear on the relay.
-SLOW_POLL_INTERVAL = timedelta(minutes=5)
-
-# when the device is out of range, use ultra slow polling since a bluetooth
-# advertisement message will kick it back into life when back in range.
-# see __init__.py: _async_specific_device_found()
-ULTRA_SLOW_POLL_INTERVAL = timedelta(hours=1)
-
-DEFAULT_FAST_POLL = 10  # pick sane defaults for your integration
-DEFAULT_SLOW_POLL = 300
-DEFAULT_XS_POLL = 3600
-DEFAULT_CACHE_VALUES = True
-
-
-BASE_COMMANDS = [
-    at_commands.VERSION_ID,
-]
+# BASE_COMMANDS = [
+#     at_commands.VERSION_ID,
+# ]
 
 class Obd2BleDataUpdateCoordinator(DataUpdateCoordinator):
     """Class to manage fetching data from the API."""
@@ -67,15 +57,10 @@ class Obd2BleDataUpdateCoordinator(DataUpdateCoordinator):
         self._cache_data: dict[str, Any] = {}
         self.options = options
 
-        # self.device_info = DeviceInfo(
-        #     identifiers={(DOMAIN, self._mac), (BLUETOOTH_DOMAIN, self._mac)},
-        #     connections={(CONNECTION_BLUETOOTH, self._mac)},
-        # )
-        # mac = device.address
         self.device_info = DeviceInfo(
             identifiers={(DOMAIN, device.address), (BLUETOOTH_DOMAIN, device.address)},
             connections={(CONNECTION_BLUETOOTH, device.address)},
-            # name=NAME,
+            name=device.name,
             model_id=self.api.protocol.name,
             sw_version=__version__,
         )
@@ -96,7 +81,7 @@ class Obd2BleDataUpdateCoordinator(DataUpdateCoordinator):
                 "Car out of range? Switch to ultra slow polling: interval = %s",
                 self.update_interval,
             )
-            if self.options.get("cache_values", False):
+            if self.options.get(CONF_CACHED_VALUES, DEFAULT_CACHED_VALUES):
                 return self._cache_data
             return {}
 
@@ -112,8 +97,17 @@ class Obd2BleDataUpdateCoordinator(DataUpdateCoordinator):
 
         _LOGGER.debug("Device is connected, proceed to query data")
         try:
+            response = await self.hass.async_add_executor_job(self.api.query, at_commands.VERSION_ID)
+            self.device_info["hw_version"] = response.value if response else None
+            # response = await self.hass.async_add_executor_job(self.api.query, at_commands.IDENTIFIER)
+            # if response and response.value and self.device_info and "identifiers" in self.device_info:
+            #     self.device_info["identifiers"].add(("identifier", response.value))
+            # response = await self.hass.async_add_executor_job(self.api.query, at_commands.DESCRIPTION)
+            # if response and response.value and self.device_info and "identifiers" in self.device_info:
+            #     self.device_info["identifiers"].add(("description", response.value))
+
             new_data = {}
-            for command in set(BASE_COMMANDS) | self.active_commands:
+            for command in self.active_commands:
                 if command is None:
                     _LOGGER.warning("Skipping invalid command: %s", command)
                     continue
@@ -141,7 +135,7 @@ class Obd2BleDataUpdateCoordinator(DataUpdateCoordinator):
         except Exception as err:
             raise UpdateFailed(f"Unable to fetch data: {err}") from err
         else:
-            if self.options.get("cache_values", False):
+            if self.options.get(CONF_CACHED_VALUES, DEFAULT_CACHED_VALUES):
                 self._cache_data.update(new_data)
                 return self._cache_data
             return new_data
@@ -180,7 +174,7 @@ class Obd2BleDataUpdateCoordinator(DataUpdateCoordinator):
     def options(self, options):
         """Set the configuration options."""
         self._options = options
-        self._fast_poll_interval = options.get("fast_poll", DEFAULT_FAST_POLL)
-        self._slow_poll_interval = options.get("slow_poll", DEFAULT_SLOW_POLL)
-        self._xs_poll_interval = options.get("xs_poll", DEFAULT_XS_POLL)
-        self._cache_values = options.get("cache_values", DEFAULT_CACHE_VALUES)
+        self._fast_poll_interval = options.get(CONF_FAST_POLL, DEFAULT_FAST_POLL)
+        self._slow_poll_interval = options.get(CONF_SLOW_POLL, DEFAULT_SLOW_POLL)
+        self._xs_poll_interval = options.get(CONF_XS_POLL, DEFAULT_XS_POLL)
+        self._cache_values = options.get(CONF_CACHED_VALUES, DEFAULT_CACHED_VALUES)

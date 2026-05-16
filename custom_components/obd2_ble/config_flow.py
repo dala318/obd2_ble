@@ -26,14 +26,21 @@ from homeassistant.components.bluetooth import (
     async_ble_device_from_address,
     async_discovered_service_info,
 )
-from homeassistant.const import CONF_ADDRESS
+from homeassistant.const import CONF_ADDRESS, CONF_COMMAND
 from homeassistant.core import callback
 from homeassistant.helpers import device_registry, selector
 
 from . import Obd2BleConfigEntry
-from .coordinator import Obd2BleDataUpdateCoordinator
+from .coordinator import DEFAULT_SLOW_POLL, DEFAULT_XS_POLL, Obd2BleDataUpdateCoordinator
 from .const import (
     CONF_AUTO_CONFIGURE,
+    CONF_CACHED_VALUES,
+    CONF_CACHED_VALUES,
+    CONF_FAST_POLL,
+    CONF_SLOW_POLL,
+    CONF_XS_POLL,
+    DEFAULT_CACHED_VALUES,
+    DEFAULT_FAST_POLL,
     DOMAIN,
     CONF_SERVICE_UUID,
     CONF_CHARACTERISTIC_UUID_READ,
@@ -43,8 +50,8 @@ from .const import (
     DEFAULT_CHARACTERISTIC_UUID_READ,
     DEFAULT_CHARACTERISTIC_UUID_WRITE,
 )
-from .device_identifier import AVAILABLE_OBD2_CLASSES, BaseOBD2, MatcherPattern
 from .obdii.transport_ble import TransportBLE
+from .obdii.transport_ble_identifiers import AVAILABLE_OBD2_CLASSES, BaseOBD2, MatcherPattern
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -66,9 +73,6 @@ async def async_prepare_service_selection_schema(
     transport: TransportBLE,
 ) -> vol.Schema:
     """Manage the options."""
-
-    # pid_commands = await coordinator.async_get_all_pid_commands()
-    # _LOGGER.debug("PID commands: %s", pid_commands)
 
     service_collection = transport.get_service_collection()
     for service in service_collection:
@@ -141,23 +145,22 @@ async def async_prepare_command_selection_schema(
 ) -> vol.Schema:
     """Manage the options."""
 
-    pid_commands = await coordinator.async_get_all_pid_commands()
-    _LOGGER.debug("PID commands: %s", pid_commands)
+    pid, commands = await coordinator.async_get_all_pid_commands()
 
     return vol.Schema(
         {
-            # vol.Required(CONF_SERVICE_UUID): selector.SelectSelector(
-            #     selector.SelectSelectorConfig(
-            #         # options=[{"value": k, "label": v} for k, v in service_map.items()],
-            #         options=[
-            #             {
-            #                 "value": service.uuid,
-            #                 "label": f"{service.description} {service.uuid.split('-')[0]}"
-            #             } for service in service_collection],
-            #         mode=selector.SelectSelectorMode.DROPDOWN,
-            #         translation_key="ble_services",
-            #     )
-            # ),
+            vol.Required(CONF_COMMAND): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[
+                        {
+                            "value": command.name,
+                            "label": f"{command.name} {command.uuid.split('-')[0]}"
+                        } for command in commands],
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                    translation_key="ble_services",
+                    multiple=True,
+                )
+            ),
         }
     )
 
@@ -328,7 +331,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     }
                 ),
                 vol.Required(
-                    CONF_AUTO_CONFIGURE, default=True
+                    CONF_AUTO_CONFIGURE, default=False
                 ): bool,
             }
         )
@@ -383,76 +386,63 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     async def async_step_reconfigure(self, user_input: dict | None = None) -> config_entries.ConfigFlowResult:
+        self._transport = self._get_reconfigure_entry().runtime_data.api.transport
+        assert self._transport is not None, "Transport should have been initialized by now"
+        if not self._transport.is_connected():
+            await self._transport.async_connect()
         return await self.async_step_service(user_input)
 
-class Obd2BleOptionsFlowHandler(config_entries.OptionsFlow):
+class Obd2BleOptionsFlowHandler(config_entries.OptionsFlowWithReload):
     """Config flow options handler for obd2_ble."""
 
     def __init__(self) -> None:
         """Initialize options flow."""
-        self.options: dict = {}
+        self._options: dict = {}
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.ConfigFlowResult:
         """Manage the options."""
-        if not self.options:
-            self.options = dict(self.config_entry.options)
+        if not self._options:
+            self._options = dict(self.config_entry.options)
 
         if user_input is not None:
             if user_input.get(CONF_PROTOCOL) is not None:
-                user_input[CONF_PROTOCOL] = Protocol(int(user_input[CONF_PROTOCOL]))
-            self.options.update(user_input)
-            return await self._update_options()
+                # user_input[CONF_PROTOCOL] = Protocol(int(user_input[CONF_PROTOCOL]))
+                user_input[CONF_PROTOCOL] = int(user_input[CONF_PROTOCOL])
+            self._options.update(user_input)
+            return self.async_create_entry(
+                title=self.config_entry.data.get(CONF_ADDRESS),
+                data=self._options,
+            )
         
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema(
                 {
                     vol.Required(
-                        "cache_values", default=self.options.get("cache_values", False)
+                        CONF_CACHED_VALUES, default=self._options.get(CONF_CACHED_VALUES, DEFAULT_CACHED_VALUES)
                     ): bool,
                     vol.Required(
-                        "fast_poll", default=self.options.get("fast_poll", 10)
+                        CONF_FAST_POLL, default=self._options.get(CONF_FAST_POLL, DEFAULT_FAST_POLL)
                     ): int,
                     vol.Required(
-                        "slow_poll", default=self.options.get("slow_poll", 300)
+                        CONF_SLOW_POLL, default=self._options.get(CONF_SLOW_POLL, DEFAULT_SLOW_POLL)
                     ): int,
                     vol.Required(
-                        "xs_poll", default=self.options.get("xs_poll", 3600)
+                        CONF_XS_POLL, default=self._options.get(CONF_XS_POLL, DEFAULT_XS_POLL)
                     ): int,
-                    vol.Required(CONF_PROTOCOL): selector.SelectSelector(
+                    vol.Required(CONF_PROTOCOL, default=str(self._options.get(CONF_PROTOCOL, Protocol.AUTO.value))): selector.SelectSelector(
                         selector.SelectSelectorConfig(
                             options=[
                                 {
                                     "value": str(protocol.value),
                                     "label": f"{protocol.name} ({protocol.value})"
-                                } for protocol in Protocol],
+                                } for protocol in Protocol if protocol != Protocol.UNKNOWN],
                             mode=selector.SelectSelectorMode.DROPDOWN,
                             translation_key="obdii_protocol",
-                        )
+                        ),
                     ),
-                    # vol.Optional(
-                    #     CONF_SERVICE_UUID,
-                    #     default=self.options.get(CONF_SERVICE_UUID)
-                    #     or DEFAULT_SERVICE_UUID,
-                    # ): str,
-                    # vol.Optional(
-                    #     CONF_CHARACTERISTIC_UUID_READ,
-                    #     default=self.options.get(CONF_CHARACTERISTIC_UUID_READ)
-                    #     or DEFAULT_CHARACTERISTIC_UUID_READ,
-                    # ): str,
-                    # vol.Optional(
-                    #     CONF_CHARACTERISTIC_UUID_WRITE,
-                    #     default=self.options.get(CONF_CHARACTERISTIC_UUID_WRITE)
-                    #     or DEFAULT_CHARACTERISTIC_UUID_WRITE,
-                    # ): str,
                 }
             ),
-        )
-
-    async def _update_options(self):
-        """Update config entry options."""
-        return self.async_create_entry(
-            title=self.config_entry.data.get(CONF_ADDRESS), data=self.options
         )

@@ -74,10 +74,10 @@ class TransportBLE(TransportBase):
         #     raise ConnectionError(f"Failed to connect to BLE device {self._ble_device.address}")
         
         await self._ble_conn.start_notify(self.config["uuid_read"], self._notify_callback)
-        for service in self._ble_conn.services:
-            _LOGGER.debug("Discovered service: %s", service.uuid)
-            for characteristic in service.characteristics:
-                _LOGGER.debug("Discovered characteristic: %s", characteristic.uuid)
+        # for service in self._ble_conn.services:
+        #     _LOGGER.debug("Discovered service: %s", service.uuid)
+        #     for characteristic in service.characteristics:
+        #         _LOGGER.debug("Discovered characteristic: %s", characteristic.uuid)
 
     async def async_close(self) -> None:
         if self._ble_conn and self._ble_conn.is_connected:
