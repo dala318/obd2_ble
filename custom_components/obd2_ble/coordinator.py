@@ -73,7 +73,7 @@ class Obd2BleDataUpdateCoordinator(DataUpdateCoordinator):
         _LOGGER.debug("Shutting down BMS (%s)", self.name)
         await super().async_shutdown()
         try:
-            self.api.close()
+            await self.hass.async_add_executor_job(self.api.close)
         except Exception as err:
             _LOGGER.warning(f"Error occurred while closing API connection: {err}")
         else:
@@ -116,6 +116,8 @@ class Obd2BleDataUpdateCoordinator(DataUpdateCoordinator):
             # response = await self.hass.async_add_executor_job(self.api.query, at_commands.DESCRIPTION)
             # if response and response.value and self.device_info and "identifiers" in self.device_info:
             #     self.device_info["identifiers"].add(("description", response.value))
+
+            await self.async_get_all_pid_commands()
 
             new_data = {}
             for command in self.active_commands:

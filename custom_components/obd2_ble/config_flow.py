@@ -365,8 +365,21 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             self._characteristic_uuid_read = user_input[CONF_CHARACTERISTIC_UUID_READ]
             self._characteristic_uuid_write = user_input[CONF_CHARACTERISTIC_UUID_WRITE]
-            assert self._transport is not None and self._transport.is_connected(), "Transport should have been initialized and connected by now"
-            await self._transport.async_close()
+            if self._transport is not None and self._transport.is_connected():
+                await self._transport.async_close()
+
+            if self.source == config_entries.SOURCE_RECONFIGURE:
+                reconfigure_entry = self._get_reconfigure_entry()
+                return self.async_update_reload_and_abort(
+                    reconfigure_entry,
+                    data={
+                        **reconfigure_entry.data,
+                        CONF_SERVICE_UUID: self._service_uuid,
+                        CONF_CHARACTERISTIC_UUID_READ: self._characteristic_uuid_read,
+                        CONF_CHARACTERISTIC_UUID_WRITE: self._characteristic_uuid_write,
+                    },
+                )
+
             assert self._discovery_info is not None, "Discovery info should have been set by now"
             return self.async_create_entry(
                 title= self._discovery_info.name,
@@ -385,6 +398,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     async def async_step_reconfigure(self, user_input: dict | None = None) -> config_entries.ConfigFlowResult:
+        # self._discovery_info = async_last_service_info(self.hass, self._get_reconfigure_entry().data[CONF_ADDRESS], connectable=True)
         self._transport = self._get_reconfigure_entry().runtime_data.api.transport
         assert self._transport is not None, "Transport should have been initialized by now"
         if not self._transport.is_connected():

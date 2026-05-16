@@ -10,6 +10,7 @@ from typing_extensions import Final
 from bleak.backends.device import BLEDevice
 
 from obdii import Connection, Protocol
+from obdii.basetypes import MISSING
 
 from homeassistant.components import bluetooth
 from homeassistant.config_entries import ConfigEntry
@@ -75,9 +76,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: Obd2BleConfigEntry) -> b
         transport=transport,
         auto_connect=False,
         protocol=Protocol(entry.options.get(CONF_PROTOCOL, Protocol.AUTO)),
-        # log_handler=_LOGGER.handlers[0],
-        # log_handler=None,
-        # log_level=logging.DEBUG,
+        log_handler=MISSING,
+        log_formatter=MISSING,
+        log_level=MISSING,
     )
 
     coordinator = Obd2BleDataUpdateCoordinator(
