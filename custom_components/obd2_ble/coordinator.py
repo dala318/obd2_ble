@@ -60,7 +60,7 @@ class Obd2BleDataUpdateCoordinator(DataUpdateCoordinator):
         self.device_info = DeviceInfo(
             identifiers={(DOMAIN, device.address), (BLUETOOTH_DOMAIN, device.address)},
             connections={(CONNECTION_BLUETOOTH, device.address)},
-            name=device.name,
+            # name=device.name,
             model_id=self.api.protocol.name,
             sw_version=__version__,
         )
