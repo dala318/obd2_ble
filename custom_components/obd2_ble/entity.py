@@ -3,31 +3,35 @@
 import logging
 
 from homeassistant.const import CONF_ADDRESS
+# from homeassistant.components.bluetooth.const import DOMAIN as BLUETOOTH_DOMAIN
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+# from homeassistant.helpers.device_registry import CONNECTION_BLUETOOTH, DeviceInfo
+import obdii
 
-from .const import ATTRIBUTION, DOMAIN, NAME
-
+from .coordinator import Obd2BleDataUpdateCoordinator
+# from .const import DOMAIN, NAME
 
 _LOGGER = logging.getLogger(__name__)
 
-
-class ObdBleEntity(CoordinatorEntity):
+class ObdBleEntity(CoordinatorEntity[Obd2BleDataUpdateCoordinator]):
     """Config entry for obd2_ble."""
 
-    def __init__(self, coordinator, config_entry, command, icon, id, domain) -> None:
+    def __init__(self, coordinator: Obd2BleDataUpdateCoordinator, config_entry, command: obdii.Command, domain) -> None:
         """Initialise."""
         super().__init__(coordinator)
-        self.config_entry = config_entry
         self._command = command
-        self._attr_icon = icon
+        # self._attr_icon = icon
 
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, self.config_entry.data[CONF_ADDRESS])},
-            "name": NAME,
-            # "model": VERSION,
-            "manufacturer": NAME,
-        }
-        self._attr_unique_id = f"{self.config_entry.data[CONF_ADDRESS]}-{domain}-{id}"
+        # mac = config_entry.data[CONF_ADDRESS]
+        # self._attr_device_info = DeviceInfo(
+        #     identifiers={(DOMAIN, mac), (BLUETOOTH_DOMAIN, mac)},
+        #     connections={(CONNECTION_BLUETOOTH, mac)},
+        #     name=NAME,
+        #     model_id=coordinator.api.protocol.name,
+        #     sw_version=obdii.__version__,
+        # )
+        self._attr_device_info = coordinator.device_info
+        self._attr_unique_id = f"{config_entry.data[CONF_ADDRESS]}-{domain}-{command.name}"
 
 
     async def async_added_to_hass(self):
@@ -41,27 +45,3 @@ class ObdBleEntity(CoordinatorEntity):
         self.coordinator.active_commands.discard(self._command)
         _LOGGER.debug("Removed command %s from active commands", self._command)
         await super().async_will_remove_from_hass()
-
-    # @property
-    # def unique_id(self):
-    #     """Return a unique ID to use for this entity."""
-    #     return f"{self.config_entry.data[CONF_ADDRESS]}-{self.name}"
-
-    # @property
-    # def device_info(self):
-    #     """Return device information."""
-    #     return {
-    #         "identifiers": {(DOMAIN, self.config_entry.data[CONF_ADDRESS])},
-    #         "name": NAME,
-    #         # "model": VERSION,
-    #         "manufacturer": NAME,
-    #     }
-
-    @property
-    def device_state_attributes(self):
-        """Return the state attributes."""
-        return {
-            "attribution": ATTRIBUTION,
-            "id": str(self.coordinator.data.get("id")),
-            "integration": DOMAIN,
-        }
